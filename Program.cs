@@ -131,12 +131,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Apply pending migrations automatically on startup
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.MigrateAsync();
-}
+await app.ApplyMigrationsAsync(app.Environment);
 
 app.UseSwagger();
 app.UseSwaggerUI();
@@ -148,7 +143,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Only seed in development
+
 if (app.Environment.IsDevelopment())
 {
     await app.SeedAsync();
