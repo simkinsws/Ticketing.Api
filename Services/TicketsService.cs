@@ -77,7 +77,7 @@ public class TicketsService : ITicketsService
         return ticket;
     }
 
-    public async Task UpdateTicketAsync(UpdateTicketRequest request,Ticket ticket)
+    public async Task UpdateTicketAsync(UpdateTicketRequest request, Ticket ticket)
     {
         
         ticket.Title = request.Title.Trim();
