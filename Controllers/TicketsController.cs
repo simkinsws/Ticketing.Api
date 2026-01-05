@@ -17,7 +17,7 @@ public class TicketsController : ControllerBase
     private readonly ITicketsService _ticketsService;
     private readonly UserManager<ApplicationUser> _userManager;
 
-    public TicketsController( ITicketsService ticketsService,UserManager<ApplicationUser> userManager)
+    public TicketsController(ITicketsService ticketsService, UserManager<ApplicationUser> userManager)
     {
         _ticketsService = ticketsService;
         _userManager = userManager;
