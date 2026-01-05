@@ -1,9 +1,10 @@
-using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Serilog;
+using System.Text;
 using Ticketing.Api.Data;
 using Ticketing.Api.Domain;
 using Ticketing.Api.Extensions;
@@ -11,9 +12,14 @@ using Ticketing.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Host.UseSerilog((ctx, lc) => lc
+    .ReadFrom.Configuration(ctx.Configuration)
+    .Enrich.FromLogContext()
+);
+
 builder.Configuration
     .SetBasePath(builder.Environment.ContentRootPath)
-    .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
     .AddEnvironmentVariables();
 
@@ -72,7 +78,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 //    return Task.CompletedTask;
                 //}
 
-                var token = context.Request.Cookies["at"];
+                var token = context.Request.Cookies["access_token"];
                 if (!string.IsNullOrEmpty(token))
                 {
                     context.Token = token;
@@ -150,5 +156,7 @@ if (app.Environment.IsDevelopment())
 {
     await app.SeedAsync();
 }
+
+app.UseSerilogRequestLogging();
 
 app.Run();
