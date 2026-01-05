@@ -27,7 +27,7 @@ public class AdminController : ControllerBase
         [FromQuery] string? category
     )
     {
-        var items = await _adminService.GetTicketListItemsAsync(userId,status,category);
+        var items = await _adminService.GetTicketListItemsAsync(userId, status, category);
 
         return items;
     }
