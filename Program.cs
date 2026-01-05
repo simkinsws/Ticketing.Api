@@ -134,6 +134,11 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 await app.ApplyMigrationsAsync(app.Environment);
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+}
 
 app.UseSwagger();
 app.UseSwaggerUI();
@@ -144,7 +149,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-
 
 if (app.Environment.IsDevelopment())
 {
