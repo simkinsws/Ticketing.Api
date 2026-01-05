@@ -39,7 +39,8 @@ public static class DatabaseMigrationExtensions
                 throw;
             }
 
-            logger.LogCritical("Migration failed in Production. Please apply migrations manually and restart the application.");
+            logger.LogCritical("Migration failed in Production. Application startup aborted. Please apply migrations manually and restart the application.");
+            throw;
         }
     }
 }
