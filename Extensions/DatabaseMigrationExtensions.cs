@@ -19,7 +19,8 @@ public static class DatabaseMigrationExtensions
                 await db.Database.MigrateAsync();
                 logger.LogInformation("Migrations applied successfully.");
             }
-            else if (app.Configuration.GetValue<bool>("AutoApplyMigrations"))
+            // Treat missing AutoApplyMigrations configuration as false (manual migrations by default in non-development environments).
+            else if (app.Configuration.GetValue<bool>("AutoApplyMigrations", false))
             {
                 logger.LogWarning("Applying pending migrations in Production environment. Ensure database backups exist.");
                 await db.Database.MigrateAsync();
