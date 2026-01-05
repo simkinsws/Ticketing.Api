@@ -131,6 +131,8 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+await app.ApplyMigrationsAsync(app.Environment);
+
 app.UseSwagger();
 app.UseSwaggerUI();
 
@@ -141,6 +143,10 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-await app.SeedAsync();
+
+if (app.Environment.IsDevelopment())
+{
+    await app.SeedAsync();
+}
 
 app.Run();

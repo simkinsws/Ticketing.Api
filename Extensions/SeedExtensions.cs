@@ -14,7 +14,6 @@ public static class SeedExtensions
         var services = scope.ServiceProvider;
 
         var db = services.GetRequiredService<AppDbContext>();
-        await db.Database.EnsureCreatedAsync();
 
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
