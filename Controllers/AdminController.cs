@@ -15,11 +15,17 @@ public class AdminController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ILogger<AdminController> _logger;
 
-    public AdminController(AppDbContext db, UserManager<ApplicationUser> userManager)
+    public AdminController(
+        AppDbContext db,
+        UserManager<ApplicationUser> userManager,
+        ILogger<AdminController> log
+    )
     {
         _db = db;
         _userManager = userManager;
+        _logger = log;
     }
 
     [HttpGet("tickets")]
@@ -29,6 +35,12 @@ public class AdminController : ControllerBase
         [FromQuery] string? category
     )
     {
+        _logger.LogInformation(
+            "Admin requested tickets list. Filters: userId={UserId}, status={Status}, category={Category}",
+            userId,
+            status,
+            category
+        );
         var q = _db.Tickets.AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(userId))
@@ -51,6 +63,8 @@ public class AdminController : ControllerBase
                 t.UpdatedAt
             ))
             .ToListAsync();
+        //TODO: Will move to Service in future.
+        _logger.LogInformation("Tickets list returned {Count} items.", items.Count);
 
         return items;
     }
@@ -98,10 +112,19 @@ public class AdminController : ControllerBase
     [HttpGet("users")]
     public async Task<ActionResult<List<UserListItem>>> Users()
     {
+        //TODO: Will move to Service in future.
+        _logger.LogInformation("Admin requested users list.");
+
         var users = await _userManager
             .Users.OrderBy(u => u.Email)
             .Select(u => new UserListItem(u.Id, u.Email!, u.UserName!, u.DisplayName))
             .ToListAsync();
+        //TODO: Will move to Service in future.
+        _logger.LogInformation(
+            "Admin fetched users list. Count={Count}, Users={Users}",
+            users.Count,
+            users.Select(u => new { u.Id, u.Email })
+        );
 
         return users;
     }
