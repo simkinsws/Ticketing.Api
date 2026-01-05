@@ -38,7 +38,7 @@ public class AdminController : ControllerBase
         [FromBody] TicketStatus status
     )
     {
-        var ticket = await _adminService.GetTicketByIdAsync(id, status);
+        var ticket = await _adminService.UpdateTicketStatusAsync(id, status);
 
         if (ticket is null)
         {
