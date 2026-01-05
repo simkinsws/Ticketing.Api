@@ -13,7 +13,7 @@ public interface IAdminService
     public Task<int> DeleteTicketsForUserAsync(string userId);
     public Task<List<UserListItem>> GetAllUsersAsync();
 }
-public class AdminService:IAdminService
+public class AdminService : IAdminService
 {
     private readonly AppDbContext _db;
     private readonly UserManager<ApplicationUser> _userManager;
