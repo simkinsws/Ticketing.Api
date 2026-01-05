@@ -148,6 +148,8 @@ app.UseSwaggerUI();
 
 app.UseCors("DevCors"); 
 
+app.UseSerilogRequestLogging();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -158,7 +160,5 @@ if (app.Environment.IsDevelopment())
 {
     await app.SeedAsync();
 }
-
-app.UseSerilogRequestLogging();
 
 app.Run();
