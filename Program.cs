@@ -88,6 +88,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<ITicketsService, TicketsService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Ticketing.Api.Data;
 using Ticketing.Api.Domain;
 using Ticketing.Api.DTOs;
+using Ticketing.Api.Services;
 
 namespace Ticketing.Api.Controllers;
 
@@ -13,12 +14,12 @@ namespace Ticketing.Api.Controllers;
 [Authorize]
 public class TicketsController : ControllerBase
 {
-    private readonly AppDbContext _db;
+    private readonly ITicketsService _ticketsService;
     private readonly UserManager<ApplicationUser> _userManager;
 
-    public TicketsController(AppDbContext db, UserManager<ApplicationUser> userManager)
+    public TicketsController( ITicketsService ticketsService,UserManager<ApplicationUser> userManager)
     {
-        _db = db;
+        _ticketsService = ticketsService;
         _userManager = userManager;
     }
 
@@ -29,18 +30,8 @@ public class TicketsController : ControllerBase
         if (user is null)
             return Unauthorized();
 
-        var ticket = new Ticket
-        {
-            Title = req.Title.Trim(),
-            Description = req.Description.Trim(),
-            Category = string.IsNullOrWhiteSpace(req.Category) ? "General" : req.Category.Trim(),
-            Priority = req.Priority,
-            Status = TicketStatus.Open,
-            CustomerId = user.Id,
-        };
 
-        _db.Tickets.Add(ticket);
-        await _db.SaveChangesAsync();
+        var ticket = await _ticketsService.AddTicketAsync(req, user.Id);
 
         return await GetById(ticket.Id);
     }
@@ -52,19 +43,7 @@ public class TicketsController : ControllerBase
         if (user is null)
             return Unauthorized();
 
-        var items = await _db
-            .Tickets.Where(t => t.CustomerId == user.Id)
-            .OrderByDescending(t => t.UpdatedAt)
-            .Select(t => new TicketListItem(
-                t.Id,
-                t.Title,
-                t.Category,
-                t.Status,
-                t.Priority,
-                t.CreatedAt,
-                t.UpdatedAt
-            ))
-            .ToListAsync();
+        var items = await _ticketsService.GetMyTicketItemsAsync(user.Id);
 
         return items;
     }
@@ -78,10 +57,7 @@ public class TicketsController : ControllerBase
 
         var isAdmin = User.IsInRole("Admin");
 
-        var ticket = await _db
-            .Tickets.Include(t => t.Comments)
-                .ThenInclude(c => c.Author)
-            .FirstOrDefaultAsync(t => t.Id == id);
+        var ticket = await _ticketsService.GetTicketByIdFilteredAsync(id);
 
         if (ticket is null)
             return NotFound();
@@ -124,20 +100,13 @@ public class TicketsController : ControllerBase
         if (user is null)
             return Unauthorized();
 
-        var ticket = await _db.Tickets.FirstOrDefaultAsync(t => t.Id == id);
+        var ticket = await _ticketsService.GetTicketByIdAsync(id);
         if (ticket is null)
             return NotFound();
         if (ticket.CustomerId != user.Id && !User.IsInRole("Admin"))
             return Forbid();
 
-        ticket.Title = req.Title.Trim();
-        ticket.Description = req.Description.Trim();
-        ticket.Category = string.IsNullOrWhiteSpace(req.Category)
-            ? ticket.Category
-            : req.Category.Trim();
-        ticket.UpdatedAt = DateTimeOffset.UtcNow;
-
-        await _db.SaveChangesAsync();
+        await _ticketsService.UpdateTicketAsync(req, ticket);
         return await GetById(id);
     }
 
@@ -151,7 +120,7 @@ public class TicketsController : ControllerBase
         if (user is null)
             return Unauthorized();
 
-        var ticket = await _db.Tickets.FirstOrDefaultAsync(t => t.Id == id);
+        var ticket = await _ticketsService.GetTicketByIdAsync(id);
         if (ticket is null)
             return NotFound();
 
@@ -159,17 +128,7 @@ public class TicketsController : ControllerBase
         if (!isAdmin && ticket.CustomerId != user.Id)
             return Forbid();
 
-        _db.TicketComments.Add(
-            new TicketComment
-            {
-                TicketId = ticket.Id,
-                AuthorId = user.Id,
-                Message = req.Message.Trim(),
-            }
-        );
-
-        ticket.UpdatedAt = DateTimeOffset.UtcNow;
-        await _db.SaveChangesAsync();
+        await _ticketsService.AddCommentAsync(req, ticket, user.Id);
 
         return await GetById(id);
     }

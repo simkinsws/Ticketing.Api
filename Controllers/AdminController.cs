@@ -14,13 +14,9 @@ namespace Ticketing.Api.Controllers;
 [Authorize(Roles = "Admin")]
 public class AdminController : ControllerBase
 {
-    private readonly AppDbContext _db;
-    private readonly UserManager<ApplicationUser> _userManager;
     private readonly IAdminService _adminService;
-    public AdminController(AppDbContext db, UserManager<ApplicationUser> userManager, IAdminService adminService)
+    public AdminController(IAdminService adminService)
     {
-        _db = db;
-        _userManager = userManager;
         _adminService = adminService;
     }
 
