@@ -8,7 +8,7 @@ namespace Ticketing.Api.Services;
 public interface IAdminService
 {
     public Task<List<TicketListItem>> GetTicketListItemsAsync(string? userId, TicketStatus? status, string? category);
-    public Task<Ticket?> GetTicketByIdAsync(Guid id, TicketStatus status);
+    public Task<Ticket?> UpdateTicketStatusAsync(Guid id, TicketStatus status);
     public Task<bool> DeleteByIdAsync(Guid id);
     public Task<int> DeleteTicketsForUserAsync(string userId);
     public Task<List<UserListItem>> GetAllUsersAsync();
@@ -56,7 +56,7 @@ public class AdminService : IAdminService
         return users;
     }
 
-    public async Task<Ticket?> GetTicketByIdAsync(Guid id, TicketStatus status)
+    public async Task<Ticket?> UpdateTicketStatusAsync(Guid id, TicketStatus status)
     {
         var ticket = await _db.Tickets.FirstOrDefaultAsync(t => t.Id == id);
 
