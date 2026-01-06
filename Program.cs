@@ -16,6 +16,9 @@ builder.Host.UseSerilog((ctx, lc) =>
 {
     lc.ReadFrom.Configuration(ctx.Configuration)
       .Enrich.FromLogContext()
+      .Enrich.WithProperty("Environment", ctx.HostingEnvironment.EnvironmentName)
+      .Enrich.WithProperty("Service", "Ticketing.Api")
+      .Enrich.WithProperty("Version", typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown")
       .WriteTo.Console();
 
     var seqUrl = ctx.Configuration["Seq:ServerUrl"];
@@ -160,40 +163,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-{
-    string? envSeqUrl = Environment.GetEnvironmentVariable("Seq__ServerUrl");
-    string? envJwtKey = Environment.GetEnvironmentVariable("Jwt__Key");
-    string? envSendGridKey = Environment.GetEnvironmentVariable("SendGridSettings__ApiKey");
-
-    var cfgSeqUrl = app.Configuration["Seq:ServerUrl"];
-    var cfgJwtKeyPresent = !string.IsNullOrWhiteSpace(app.Configuration["Jwt:Key"]);
-    var cfgSendGridPresent = !string.IsNullOrWhiteSpace(app.Configuration["SendGridSettings:ApiKey"]);
-    var cfgConnPresent = !string.IsNullOrWhiteSpace(app.Configuration.GetConnectionString("Default"));
-
-    string seqHost = "(missing/invalid)";
-    if (Uri.TryCreate(cfgSeqUrl, UriKind.Absolute, out var seqUri))
-        seqHost = seqUri.Host;
-
-    bool seqFromEnv = !string.IsNullOrWhiteSpace(envSeqUrl) && string.Equals(envSeqUrl, cfgSeqUrl, StringComparison.Ordinal);
-    bool jwtFromEnv = !string.IsNullOrWhiteSpace(envJwtKey); // don't compare values; just prove it exists in env
-    bool sendGridFromEnv = !string.IsNullOrWhiteSpace(envSendGridKey);
-
-    bool isAppService = !string.IsNullOrWhiteSpace(app.Configuration["WEBSITE_INSTANCE_ID"]);
-
-    app.Logger.LogInformation(
-        "CONFIG CHECK: Env={Env} IsAppService={IsAppService} SeqHost={SeqHost} SeqConfigured={SeqConfigured} SeqFromEnv={SeqFromEnv} JwtKeyPresent={JwtKeyPresent} JwtFromEnv={JwtFromEnv} SendGridKeyPresent={SendGridKeyPresent} SendGridFromEnv={SendGridFromEnv} ConnStringPresent={ConnStringPresent}",
-        app.Environment.EnvironmentName,
-        isAppService,
-        seqHost,
-        !string.IsNullOrWhiteSpace(cfgSeqUrl),
-        seqFromEnv,
-        cfgJwtKeyPresent,
-        jwtFromEnv,
-        cfgSendGridPresent,
-        sendGridFromEnv,
-        cfgConnPresent
-    );
-}
+app.LogConfigurationCheck();
 
 await app.ApplyMigrationsAsync(app.Environment);
 
