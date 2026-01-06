@@ -91,6 +91,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+builder.Services.AddHttpContextAccessor();
+
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
@@ -146,6 +148,8 @@ app.UseSwaggerUI();
 
 app.UseCors("DevCors"); 
 
+app.UseSerilogRequestLogging();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -156,7 +160,5 @@ if (app.Environment.IsDevelopment())
 {
     await app.SeedAsync();
 }
-
-app.UseSerilogRequestLogging();
 
 app.Run();

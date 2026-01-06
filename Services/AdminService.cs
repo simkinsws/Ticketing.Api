@@ -42,7 +42,7 @@ public class AdminService : IAdminService
     public async Task<bool> DeleteByIdAsync(Guid id)
     {
         var adminName =
-            _httpContextAccessor.HttpContext?.User?.FindFirst("displayName")?.Value ?? "General";
+            _httpContextAccessor.HttpContext?.User?.FindFirst("displayName")?.Value ?? "UnknownAdmin";
         _logger.LogInformation(
             "Admin {adminName} attempting to delete ticket with ID: {TicketId}",
             adminName,
