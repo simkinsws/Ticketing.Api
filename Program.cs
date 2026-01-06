@@ -172,6 +172,8 @@ app.UseSwaggerUI();
 
 app.UseCors("DevCors"); 
 
+app.UseRequestIdHeader();
+
 app.UseSerilogRequestLogging();
 
 app.UseAuthentication();
