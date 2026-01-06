@@ -1,15 +1,33 @@
-using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Serilog;
+using System.Text;
 using Ticketing.Api.Data;
 using Ticketing.Api.Domain;
 using Ticketing.Api.Extensions;
 using Ticketing.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog((ctx, lc) =>
+{
+    lc.ReadFrom.Configuration(ctx.Configuration)
+      .Enrich.FromLogContext()
+      .Enrich.WithProperty("Environment", ctx.HostingEnvironment.EnvironmentName)
+      .Enrich.WithProperty("Service", "Ticketing.Api")
+      .Enrich.WithProperty("Version", typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown")
+      .WriteTo.Console();
+
+    var seqUrl = ctx.Configuration["Seq:ServerUrl"];
+
+    if (Uri.TryCreate(seqUrl, UriKind.Absolute, out _))
+    {
+        lc.WriteTo.Seq(seqUrl!);
+    }
+});
 
 builder.Configuration
     .SetBasePath(builder.Environment.ContentRootPath)
@@ -21,6 +39,16 @@ if (builder.Environment.IsDevelopment())
 {
     builder.Configuration.AddUserSecrets<Program>(optional: true);
 }
+
+if (!builder.Environment.IsDevelopment())
+{
+    if (string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("Default")))
+        throw new InvalidOperationException("ConnectionStrings:Default is required in production.");
+
+    if (string.IsNullOrWhiteSpace(builder.Configuration["Jwt:Key"]))
+        throw new InvalidOperationException("Jwt:Key is required in production.");
+}
+
 
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 
@@ -72,7 +100,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 //    return Task.CompletedTask;
                 //}
 
-                var token = context.Request.Cookies["at"];
+                var token = context.Request.Cookies["access_token"];
                 if (!string.IsNullOrEmpty(token))
                 {
                     context.Token = token;
@@ -85,8 +113,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+builder.Services.AddHttpContextAccessor();
+
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<ITicketsService, TicketsService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -131,24 +163,25 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Apply pending migrations automatically on startup
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.MigrateAsync();
-}
+app.LogConfigurationCheck();
+
+await app.ApplyMigrationsAsync(app.Environment);
 
 app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseCors("DevCors"); 
 
+app.UseRequestIdHeader();
+
+app.UseSerilogRequestLogging();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 
-// Only seed in development
+
 if (app.Environment.IsDevelopment())
 {
     await app.SeedAsync();
