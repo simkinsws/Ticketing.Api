@@ -23,6 +23,11 @@ builder.Configuration
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
     .AddEnvironmentVariables();
 
+if (builder.Environment.IsDevelopment())
+{
+    builder.Configuration.AddUserSecrets<Program>(optional: true);
+}
+
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 
 builder.Services.AddDbContext<AppDbContext>(opt =>
@@ -155,7 +160,5 @@ if (app.Environment.IsDevelopment())
 {
     await app.SeedAsync();
 }
-
-app.UseSerilogRequestLogging();
 
 app.Run();
