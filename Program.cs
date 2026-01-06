@@ -28,6 +28,16 @@ if (builder.Environment.IsDevelopment())
     builder.Configuration.AddUserSecrets<Program>(optional: true);
 }
 
+if (!builder.Environment.IsDevelopment())
+{
+    if (string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("Default")))
+        throw new InvalidOperationException("ConnectionStrings:Default is required in production.");
+
+    if (string.IsNullOrWhiteSpace(builder.Configuration["Jwt:Key"]))
+        throw new InvalidOperationException("Jwt:Key is required in production.");
+}
+
+
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 
 builder.Services.AddDbContext<AppDbContext>(opt =>
