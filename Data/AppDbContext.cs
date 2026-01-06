@@ -15,6 +15,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
+    public DbSet<Notification> Notifications => Set<Notification>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -22,6 +24,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         builder
             .ConfigureTicket()
             .ConfigureTicketComment()
-            .ConfigureRefreshToken();
+            .ConfigureRefreshToken()
+            .ConfigureNotification();
     }
 }

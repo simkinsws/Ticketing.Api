@@ -8,6 +8,7 @@ using System.Text;
 using Ticketing.Api.Data;
 using Ticketing.Api.Domain;
 using Ticketing.Api.Extensions;
+using Ticketing.Api.Notifications;
 using Ticketing.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -72,6 +73,7 @@ builder.Services
     .AddEntityFrameworkStores<AppDbContext>()
     .AddSignInManager()
     .AddDefaultTokenProviders();
+builder.Services.AddSignalR();
 
 var jwtSection = builder.Configuration.GetSection("Jwt");
 var key = jwtSection["Key"] ?? throw new InvalidOperationException("Jwt:Key is required");
@@ -94,16 +96,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         {
             OnMessageReceived = context =>
             {
-                //TODO : Consider security implications of reading token from cookie or from header for production use!
-                //if (!string.IsNullOrEmpty(context.Request.Headers["Authorization"]))
-                //{
-                //    return Task.CompletedTask;
-                //}
+                // If this is a SignalR Hub request, allow token from query string
+                var path = context.HttpContext.Request.Path;
 
-                var token = context.Request.Cookies["access_token"];
-                if (!string.IsNullOrEmpty(token))
+                if (path.StartsWithSegments("/hubs/notifications"))
                 {
-                    context.Token = token;
+                    var accessToken = context.Request.Query["access_token"];
+                    if (!string.IsNullOrEmpty(accessToken))
+                    {
+                        context.Token = accessToken;
+                        return Task.CompletedTask;
+                    }
+                }
+
+                // Otherwise, fall back to cookie (your current approach)
+                var cookieToken = context.Request.Cookies["access_token"];
+                if (!string.IsNullOrEmpty(cookieToken))
+                {
+                    context.Token = cookieToken;
                 }
 
                 return Task.CompletedTask;
@@ -119,6 +129,8 @@ builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<ITicketsService, TicketsService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -169,6 +181,7 @@ await app.ApplyMigrationsAsync(app.Environment);
 
 app.UseSwagger();
 app.UseSwaggerUI();
+app.UseStaticFiles();
 
 app.UseCors("DevCors"); 
 
@@ -186,5 +199,6 @@ if (app.Environment.IsDevelopment())
 {
     await app.SeedAsync();
 }
+app.MapHub<NotificationHub>("/hubs/notifications").RequireAuthorization(); ;
 
 app.Run();

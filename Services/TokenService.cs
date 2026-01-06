@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -26,23 +26,30 @@ public class TokenService
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly AppDbContext _db;
 
-    public TokenService(IOptions<JwtOptions> options, UserManager<ApplicationUser> userManager, AppDbContext db)
+    public TokenService(
+        IOptions<JwtOptions> options,
+        UserManager<ApplicationUser> userManager,
+        AppDbContext db
+    )
     {
         _opts = options.Value;
         _userManager = userManager;
         _db = db;
     }
 
-    public async Task<(string accessToken, DateTimeOffset expiresAt)> CreateAccessTokenAsync(ApplicationUser user)
+    public async Task<(string accessToken, DateTimeOffset expiresAt)> CreateAccessTokenAsync(
+        ApplicationUser user
+    )
     {
         var roles = await _userManager.GetRolesAsync(user);
 
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.Id),
+            new(ClaimTypes.NameIdentifier, user.Id),
             new(JwtRegisteredClaimNames.Email, user.Email ?? ""),
             new("displayName", user.DisplayName ?? ""),
-            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         };
 
         claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
@@ -67,7 +74,11 @@ public class TokenService
     {
         var bytes = RandomNumberGenerator.GetBytes(64);
         var token = Convert.ToBase64String(bytes);
-        return (token, HashRefreshToken(token), DateTimeOffset.UtcNow.AddDays(_opts.RefreshTokenDays));
+        return (
+            token,
+            HashRefreshToken(token),
+            DateTimeOffset.UtcNow.AddDays(_opts.RefreshTokenDays)
+        );
     }
 
     public string HashRefreshToken(string token)
@@ -77,21 +88,27 @@ public class TokenService
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    public async Task StoreRefreshTokenAsync(string userId, string tokenHash, DateTimeOffset expiresAt)
+    public async Task StoreRefreshTokenAsync(
+        string userId,
+        string tokenHash,
+        DateTimeOffset expiresAt
+    )
     {
-        _db.RefreshTokens.Add(new RefreshToken
-        {
-            UserId = userId,
-            TokenHash = tokenHash,
-            ExpiresAt = expiresAt
-        });
+        _db.RefreshTokens.Add(
+            new RefreshToken
+            {
+                UserId = userId,
+                TokenHash = tokenHash,
+                ExpiresAt = expiresAt,
+            }
+        );
         await _db.SaveChangesAsync();
     }
 
     public async Task<RefreshToken?> GetActiveRefreshTokenAsync(string userId, string tokenHash)
     {
-        return await _db.RefreshTokens
-            .Where(r => r.UserId == userId && r.TokenHash == tokenHash)
+        return await _db
+            .RefreshTokens.Where(r => r.UserId == userId && r.TokenHash == tokenHash)
             .OrderByDescending(r => r.CreatedAt)
             .FirstOrDefaultAsync(r => r.IsActive);
     }

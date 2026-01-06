@@ -1,7 +1,8 @@
-using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using Ticketing.Api.Domain;
 using Ticketing.Api.DTOs;
 using Ticketing.Api.Services;
@@ -510,12 +511,13 @@ public class AuthController : ControllerBase
 
             var roles = (await _userManager.GetRolesAsync(user)).ToArray();
             _logger.LogInformation(
-                "Me endpoint - User retrieved. UserId: {UserId}, Email: {Email}, Roles: {Roles}",
+                "Me endpoint - User retrieved. UserId: {UserId}, Email: {Email}, Roles: {Roles}, NameIdentifier: {NameIdentifier}",
                 user.Id,
                 user.Email,
-                string.Join(", ", roles)
+                string.Join(", ", roles),
+                User.FindFirst(ClaimTypes.NameIdentifier)?.Value
             );
-            return new UserProfile(user.Id, user.Email ?? "", user.DisplayName ?? "", roles);
+            return new UserProfile(user.Id, user.Email ?? "", user.DisplayName ?? "", roles, User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
         }
         catch (Exception ex)
         {

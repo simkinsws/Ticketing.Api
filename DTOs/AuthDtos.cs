@@ -13,6 +13,6 @@ public record AuthResponse(
     UserProfile User
 );
 
-public record UserProfile(string Id, string Email, string DisplayName, string[] Roles);
+public record UserProfile(string Id, string Email, string DisplayName, string[] Roles, string? nameIdentifier = null);
 
 public record UserListItem(string Id, string Email, string UserName, string? DisplayName);
