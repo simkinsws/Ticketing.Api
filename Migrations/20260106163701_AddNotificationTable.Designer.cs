@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Ticketing.Api.Data;
 
@@ -11,9 +12,11 @@ using Ticketing.Api.Data;
 namespace Ticketing.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260106163701_AddNotificationTable")]
+    partial class AddNotificationTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -240,7 +243,7 @@ namespace Ticketing.Api.Migrations
                     b.Property<DateTimeOffset?>("ReadAtUtc")
                         .HasColumnType("datetimeoffset");
 
-                    b.Property<Guid?>("TicketId")
+                    b.Property<Guid>("TicketId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Title")
@@ -250,7 +253,6 @@ namespace Ticketing.Api.Migrations
 
                     b.Property<string>("UserId")
                         .IsRequired()
-                        .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
                     b.HasKey("Id");
@@ -259,9 +261,10 @@ namespace Ticketing.Api.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.HasIndex("UserId", "CreatedAtUtc");
+                    b.HasIndex("UserId", "CreatedAtUtc")
+                        .IsDescending(false, true);
 
-                    b.ToTable("Notifications", (string)null);
+                    b.ToTable("Notifications");
                 });
 
             modelBuilder.Entity("Ticketing.Api.Domain.RefreshToken", b =>
@@ -431,7 +434,8 @@ namespace Ticketing.Api.Migrations
                     b.HasOne("Ticketing.Api.Domain.Ticket", "Ticket")
                         .WithMany()
                         .HasForeignKey("TicketId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.HasOne("Ticketing.Api.Domain.ApplicationUser", "User")
                         .WithMany()

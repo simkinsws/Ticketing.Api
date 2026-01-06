@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Ticketing.Api.Domain;
 
 namespace Ticketing.Api.Data.Configuration;
@@ -49,6 +49,52 @@ public static class ModelBuilderExtensions
         {
             b.HasIndex(r => new { r.UserId, r.TokenHash }).IsUnique();
             b.Property(r => r.TokenHash).HasMaxLength(64).IsRequired();
+        });
+
+        return builder;
+    }
+
+    public static ModelBuilder ConfigureNotification(this ModelBuilder builder)
+    {
+        builder.Entity<Notification>(b =>
+        {
+            b.ToTable("Notifications");
+
+            b.HasKey(n => n.Id);
+
+            b.HasIndex(n => n.UserId);
+            b.HasIndex(n => n.TicketId);
+
+            b.HasIndex(n => new { n.UserId, n.CreatedAtUtc });
+
+            b.Property(n => n.UserId)
+                .IsRequired()
+                .HasMaxLength(450);
+
+            b.Property(n => n.Title)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            b.Property(n => n.Message)
+                .IsRequired()
+                .HasMaxLength(2000);
+
+            b.Property(n => n.CreatedAtUtc)
+                .IsRequired();
+
+            b.Property(n => n.ReadAtUtc)
+                .IsRequired(false);
+
+            b.HasOne(n => n.User)
+                .WithMany()
+                .HasForeignKey(n => n.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            b.HasOne(n => n.Ticket)
+                .WithMany()
+                .HasForeignKey(n => n.TicketId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired(false);
         });
 
         return builder;
