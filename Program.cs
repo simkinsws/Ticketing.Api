@@ -12,10 +12,19 @@ using Ticketing.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Host.UseSerilog((ctx, lc) => lc
-    .ReadFrom.Configuration(ctx.Configuration)
-    .Enrich.FromLogContext()
-);
+builder.Host.UseSerilog((ctx, lc) =>
+{
+    lc.ReadFrom.Configuration(ctx.Configuration)
+      .Enrich.FromLogContext();
+
+    var seqUrl = ctx.Configuration["Seq:ServerUrl"];
+    var seqKey = ctx.Configuration["Seq:ApiKey"];
+
+    if (Uri.TryCreate(seqUrl, UriKind.Absolute, out _))
+    {
+        lc.WriteTo.Seq(seqUrl!, apiKey: seqKey);
+    }
+});
 
 builder.Configuration
     .SetBasePath(builder.Environment.ContentRootPath)
