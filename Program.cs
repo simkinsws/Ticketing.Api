@@ -156,4 +156,6 @@ if (app.Environment.IsDevelopment())
     await app.SeedAsync();
 }
 
+app.UseSerilogRequestLogging();
+
 app.Run();
