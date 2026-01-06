@@ -13,22 +13,24 @@ public static class DatabaseMigrationExtensions
 
         try
         {
+            var autoApplyMigrations = app.Configuration.GetValue<bool>("AutoApplyMigrations", false);
+            logger.LogInformation("Starting database migration check. Environment: {Environment}, AutoApplyMigrations: {AutoApplyMigrations}", environment.EnvironmentName, autoApplyMigrations);
+
             if (environment.IsDevelopment())
             {
-                logger.LogInformation("Applying pending migrations in Development environment...");
+                logger.LogInformation("Running in Development environment - Applying pending migrations...");
                 await db.Database.MigrateAsync();
-                logger.LogInformation("Migrations applied successfully.");
+                logger.LogInformation("Migrations applied successfully in Development environment.");
             }
-            // Treat missing AutoApplyMigrations configuration as false (manual migrations by default in non-development environments).
-            else if (app.Configuration.GetValue<bool>("AutoApplyMigrations", false))
+            else if (autoApplyMigrations)
             {
-                logger.LogWarning("Applying pending migrations in Production environment. Ensure database backups exist.");
+                logger.LogWarning("Running in {Environment} environment with AutoApplyMigrations enabled - Applying pending migrations. Ensure database backups exist.", environment.EnvironmentName);
                 await db.Database.MigrateAsync();
-                logger.LogInformation("Migrations applied successfully in Production.");
+                logger.LogInformation("Migrations applied successfully in {Environment} environment.", environment.EnvironmentName);
             }
             else
             {
-                logger.LogInformation("AutoApplyMigrations is disabled in Production. Migrations must be applied manually during deployment.");
+                logger.LogInformation("AutoApplyMigrations is disabled in {Environment} environment. Migrations must be applied manually during deployment.", environment.EnvironmentName);
             }
         }
         catch (Exception ex)
@@ -40,7 +42,7 @@ public static class DatabaseMigrationExtensions
                 throw;
             }
 
-            logger.LogCritical("Migration failed in Production. The application may not function correctly until migrations are applied. Please apply migrations manually and restart the application if necessary.");
+            logger.LogCritical("Migration failed in {Environment} environment. The application may not function correctly until migrations are applied. Please apply migrations manually and restart the application if necessary. Error details: {ExceptionMessage}", environment.EnvironmentName, ex.Message);
         }
     }
 }

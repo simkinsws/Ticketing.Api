@@ -3,6 +3,19 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# Environment-specific configuration files with secrets
+# Never commit actual appsettings files with real connection strings, API keys, or passwords
+appsettings.json
+appsettings.Production.json
+appsettings.Staging.json
+appsettings.*.json
+!appsettings.Development.json
+!appsettings.json.template
+!appsettings.*.template
+
+# User Secrets
+secrets.json
+
 # User-specific files
 *.rsuser
 *.suo
@@ -361,9 +374,3 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
-
-# User-specific appsettings (contains secrets, connection strings, API keys)
-appsettings.json
-
-# User Secrets
-secrets.json
