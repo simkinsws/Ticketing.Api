@@ -9,9 +9,7 @@ using Ticketing.Api.Configuration;
 using Ticketing.Api.Data;
 using Ticketing.Api.Domain;
 using Ticketing.Api.Extensions;
-using Ticketing.Api.Helpers;
 using Ticketing.Api.Hubs;
-using Ticketing.Api.Notifications;
 using Ticketing.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
