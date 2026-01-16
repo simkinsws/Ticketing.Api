@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using System.Text;
+using Ticketing.Api.Configuration;
 using Ticketing.Api.Data;
 using Ticketing.Api.Domain;
 using Ticketing.Api.Extensions;
