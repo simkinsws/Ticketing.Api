@@ -48,7 +48,7 @@ public class TokenService
             new(JwtRegisteredClaimNames.Sub, user.Id),
             new(ClaimTypes.NameIdentifier, user.Id),
             new(JwtRegisteredClaimNames.Email, user.Email ?? ""),
-            new("displayName", user.DisplayName ?? ""),
+            new("display_name", user.DisplayName ?? ""),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         };
 

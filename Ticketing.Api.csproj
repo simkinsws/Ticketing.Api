@@ -6,9 +6,14 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <UserSecretsId>eb48fd68-3ec7-46a6-b678-8dcc138eb621</UserSecretsId>
+    <!-- Enable real-time error detection & code analysis -->
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest</AnalysisLevel>
   </PropertyGroup>
 
 <ItemGroup>
+  <PackageReference Include="Azure.Storage.Blobs" Version="12.27.0" />
   <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
   <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.0" />
   <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.0" />
@@ -24,5 +29,9 @@
   </PackageReference>
   <!-- Tools package (helps in some IDEs/build scenarios) -->
   <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.0" />
+</ItemGroup>
+
+<ItemGroup>
+  <Folder Include="wwwroot\" />
 </ItemGroup>
 </Project>

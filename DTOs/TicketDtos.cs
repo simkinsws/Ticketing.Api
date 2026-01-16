@@ -48,3 +48,44 @@ public record TicketDetails(
     DateTimeOffset UpdatedAt,
     IReadOnlyList<TicketCommentDto> Comments
 );
+
+/// <summary>
+/// Request parameters for filtering, sorting, and paginating tickets.
+/// </summary>
+public record GetTicketsRequest
+{
+    /// <summary>
+    /// Filter by customer user ID
+    /// </summary>
+    public string? UserId { get; init; }
+
+    /// <summary>
+    /// Filter by ticket category
+    /// </summary>
+    public string? Category { get; init; }
+
+    /// <summary>
+    /// Filter by ticket status (0=Open, 1=InProgress, 2=Resolved, 3=Closed)
+    /// </summary>
+    public TicketStatus? Status { get; init; }
+    
+    /// <summary>
+    /// Sort column name (Title, Category, Status, Priority, CreatedAt, UpdatedAt)
+    /// </summary>
+    public string SortBy { get; init; } = "UpdatedAt";
+    
+    /// <summary>
+    /// Sort direction (true=ascending, false=descending)
+    /// </summary>
+    public bool Ascending { get; init; } = false;
+    
+    /// <summary>
+    /// Number of items per page (1-100)
+    /// </summary>
+    public int PageSize { get; init; } = 10;
+    
+    /// <summary>
+    /// Page number (1-based)
+    /// </summary>
+    public int PageNumber { get; init; } = 1;
+}

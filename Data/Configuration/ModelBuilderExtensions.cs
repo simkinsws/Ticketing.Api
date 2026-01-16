@@ -99,4 +99,61 @@ public static class ModelBuilderExtensions
 
         return builder;
     }
+
+    public static ModelBuilder ConfigureConversation(this ModelBuilder builder)
+    {
+        builder.Entity<Conversation>(b =>
+        {
+            b.ToTable("Conversations");
+            b.HasKey(c => c.Id);
+
+            b.Property(c => c.CustomerUserId).IsRequired().HasMaxLength(450);
+            b.Property(c => c.CustomerDisplayName).IsRequired().HasMaxLength(200);
+            b.Property(c => c.LastMessagePreview).IsRequired().HasMaxLength(500);
+            b.Property(c => c.CreatedAt).IsRequired();
+            b.Property(c => c.LastMessageAt).IsRequired();
+            b.Property(c => c.UnreadForAdminCount).IsRequired();
+            b.Property(c => c.UnreadForCustomerCount).IsRequired();
+            b.Property(c => c.IsOpen).IsRequired();
+
+            b.HasIndex(c => c.CustomerUserId);
+            b.HasIndex(c => c.LastMessageAt);
+
+            b.HasOne(c => c.Customer)
+                .WithMany()
+                .HasForeignKey(c => c.CustomerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        return builder;
+    }
+
+    public static ModelBuilder ConfigureMessage(this ModelBuilder builder)
+    {
+        builder.Entity<Message>(b =>
+        {
+            b.ToTable("Messages");
+            b.HasKey(m => m.Id);
+
+            b.Property(m => m.ConversationId).IsRequired();
+            b.Property(m => m.SenderUserId).IsRequired().HasMaxLength(450);
+            b.Property(m => m.Text).IsRequired().HasMaxLength(2000);
+            b.Property(m => m.CreatedAt).IsRequired();
+
+            b.HasIndex(m => new { m.ConversationId, m.CreatedAt });
+            b.HasIndex(m => m.SenderUserId);
+
+            b.HasOne(m => m.Conversation)
+                .WithMany()
+                .HasForeignKey(m => m.ConversationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasOne(m => m.Sender)
+                .WithMany()
+                .HasForeignKey(m => m.SenderUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        return builder;
+    }
 }

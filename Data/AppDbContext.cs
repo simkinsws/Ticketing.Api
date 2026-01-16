@@ -17,6 +17,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<Notification> Notifications => Set<Notification>();
 
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+
+    public DbSet<Message> Messages => Set<Message>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -25,6 +29,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             .ConfigureTicket()
             .ConfigureTicketComment()
             .ConfigureRefreshToken()
-            .ConfigureNotification();
+            .ConfigureNotification()
+            .ConfigureConversation()
+            .ConfigureMessage();
     }
 }
