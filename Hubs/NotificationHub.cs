@@ -1,6 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 
-namespace Ticketing.Api.Notifications
+namespace Ticketing.Api.Hubs
 {
     public class NotificationHub : Hub
     {
