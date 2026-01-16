@@ -5,9 +5,12 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using System.Text;
+using Ticketing.Api.Configuration;
 using Ticketing.Api.Data;
 using Ticketing.Api.Domain;
 using Ticketing.Api.Extensions;
+using Ticketing.Api.Helpers;
+using Ticketing.Api.Hubs;
 using Ticketing.Api.Notifications;
 using Ticketing.Api.Services;
 
@@ -96,10 +99,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         {
             OnMessageReceived = context =>
             {
-                // If this is a SignalR Hub request, allow token from query string
+                // If this is a SignalR Hub request, allow token from query string or cookie
                 var path = context.HttpContext.Request.Path;
 
-                if (path.StartsWithSegments("/hubs/notifications"))
+                if (path.StartsWithSegments("/hubs/notifications") || path.StartsWithSegments("/hubs/support"))
                 {
                     var accessToken = context.Request.Query["access_token"];
                     if (!string.IsNullOrEmpty(accessToken))
@@ -130,7 +133,7 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<ITicketsService, TicketsService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
-
+builder.Services.AddScoped<ISupportChatService, SupportChatService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -166,7 +169,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("DevCors", policy =>
     {
         policy
-            .WithOrigins("http://localhost:5173")
+            .WithOrigins("https://localhost:5173")
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
@@ -199,6 +202,8 @@ if (app.Environment.IsDevelopment())
 {
     await app.SeedAsync();
 }
-app.MapHub<NotificationHub>("/hubs/notifications").RequireAuthorization(); ;
+app.MapHub<NotificationHub>("/hubs/notifications").RequireAuthorization();
+app.MapHub<SupportChatHub>("/hubs/support").RequireAuthorization();
+
 
 app.Run();

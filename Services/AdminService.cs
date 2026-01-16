@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Identity;
+﻿using System.Diagnostics.Eventing.Reader;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Ticketing.Api.Data;
 using Ticketing.Api.Domain;
@@ -8,15 +10,15 @@ namespace Ticketing.Api.Services;
 
 public interface IAdminService
 {
-    public Task<List<TicketListItem>> GetTicketListItemsAsync(
-        string? userId,
-        TicketStatus? status,
-        string? category
-    );
+    public Task<List<TicketListItem>> GetTicketListItemsAsync(GetTicketsRequest request);
     public Task<Ticket?> UpdateTicketStatusAsync(Guid id, TicketStatus status);
     public Task<bool> DeleteByIdAsync(Guid id);
     public Task<int> DeleteTicketsForUserAsync(string userId);
     public Task<List<UserListItem>> GetAllUsersAsync();
+    public Task<string> AssignTicketToAdminAsync(Guid id, string? adminId);
+    public Task<List<UserListItem>> GetAllAdminsAsync();
+    public Task<bool> UnAssignTicketToAdminAsync(Guid id);
+    public Task<List<TicketDetails>> GetAssignMeTickets(string? me);
 }
 
 public class AdminService : IAdminService
@@ -25,24 +27,29 @@ public class AdminService : IAdminService
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ILogger<AdminService> _logger;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly INotificationService _notificationService;
 
     public AdminService(
         AppDbContext db,
         UserManager<ApplicationUser> userManager,
         ILogger<AdminService> logger,
-        IHttpContextAccessor httpContextAccessor
-    )
+        IHttpContextAccessor httpContextAccessor,
+        RoleManager<IdentityRole> roleManager
+,
+        INotificationService notificationService)
     {
         _db = db;
         _userManager = userManager;
         _logger = logger;
         _httpContextAccessor = httpContextAccessor;
+        _notificationService = notificationService;
     }
 
     public async Task<bool> DeleteByIdAsync(Guid id)
     {
         var adminName =
-            _httpContextAccessor.HttpContext?.User?.FindFirst("displayName")?.Value ?? "UnknownAdmin";
+            _httpContextAccessor.HttpContext?.User?.FindFirst("display_name")?.Value
+            ?? "UnknownAdmin";
         _logger.LogInformation(
             "Admin {adminName} attempting to delete ticket with ID: {TicketId}",
             adminName,
@@ -161,6 +168,7 @@ public class AdminService : IAdminService
                 id,
                 status
             );
+            await _notificationService.CreateNotificationAsync(ticket.CustomerId, $"Status updated for ticket - {ticket.Title}", $"new status is {status}");
             return ticket;
         }
         catch (Exception ex)
@@ -176,33 +184,44 @@ public class AdminService : IAdminService
         }
     }
 
-    public async Task<List<TicketListItem>> GetTicketListItemsAsync(
-        string? userId,
-        TicketStatus? status,
-        string? category
-    )
+    public async Task<List<TicketListItem>> GetTicketListItemsAsync(GetTicketsRequest request)
     {
         _logger.LogInformation(
-            "Attempting to retrieve tickets with filters - UserId: {UserId}, Status: {Status}, Category: {Category}",
-            userId,
-            status,
-            category
+            "Retrieving tickets - UserId: {UserId}, Status: {Status}, Category: {Category}, " +
+            "SortBy: {SortBy}, Ascending: {Ascending}, Page: {Page}/{Size}",
+            request.UserId,
+            request.Status,
+            request.Category,
+            request.SortBy,
+            request.Ascending,
+            request.PageNumber,
+            request.PageSize
         );
 
         try
         {
-            var q = _db.Tickets.AsQueryable();
+            var query = _db.Tickets.AsQueryable();
 
-            if (!string.IsNullOrWhiteSpace(userId))
-                q = q.Where(t => t.CustomerId == userId);
+            if (!string.IsNullOrWhiteSpace(request.UserId))
+            {
+                query = query.Where(t => t.CustomerId == request.UserId);
+            }
 
-            if (status is not null)
-                q = q.Where(t => t.Status == status);
+            if (request.Status.HasValue)
+            {
+                query = query.Where(t => t.Status == request.Status.Value);
+            }
 
-            if (!string.IsNullOrWhiteSpace(category))
-                q = q.Where(t => t.Category == category);
+            if (!string.IsNullOrWhiteSpace(request.Category))
+            {
+                query = query.Where(t => t.Category == request.Category);
+            }
 
-            var items = await q.OrderByDescending(t => t.UpdatedAt)
+            query = ApplySorting(query, request.SortBy, request.Ascending);
+
+            var items = await query
+                .Skip((request.PageNumber - 1) * request.PageSize)
+                .Take(request.PageSize)
                 .Select(t => new TicketListItem(
                     t.Id,
                     t.Title,
@@ -215,25 +234,137 @@ public class AdminService : IAdminService
                 .ToListAsync();
 
             _logger.LogInformation(
-                "Successfully retrieved {TicketCount} tickets with filters - UserId: {UserId}, Status: {Status}, Category: {Category}",
-                items.Count,
-                userId,
-                status,
-                category
+                "Successfully retrieved {TicketCount} tickets",
+                items.Count
             );
+
             return items;
         }
         catch (Exception ex)
         {
             _logger.LogError(
                 ex,
-                "Failed to retrieve tickets with filters - UserId: {UserId}, Status: {Status}, Category: {Category}. Error: {ErrorMessage}",
-                userId,
-                status,
-                category,
+                "Failed to retrieve tickets - Error: {ErrorMessage}",
                 ex.Message
             );
             return new List<TicketListItem>();
+        }    }
+
+    public async Task<string> AssignTicketToAdminAsync(Guid id, string? adminId)
+    {
+        var ticket = await _db.Tickets.FirstOrDefaultAsync(t => t.Id == id);
+        if (ticket == null)
+        {
+            return null!;
         }
+        ticket.AssignedAdminId = adminId;
+        ticket.UpdatedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync();
+        return ticket.AssignedAdminId!;
+    }
+
+    public async Task<List<UserListItem>> GetAllAdminsAsync()
+    {
+        var admins = await _userManager.GetUsersInRoleAsync("Admin");
+        var mappedAdmins = admins
+            .Select(x => new UserListItem(x.Id, x.Email!, x.UserName!, x.DisplayName))
+            .ToList();
+        return mappedAdmins;
+    }
+
+    public async Task<bool> UnAssignTicketToAdminAsync(Guid id)
+    {
+        var ticket = await _db.Tickets.FirstOrDefaultAsync(t => t.Id == id);
+        if (ticket == null)
+        {
+            return false;
+        }
+        ticket.AssignedAdminId = null;
+        ticket.UpdatedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<List<TicketDetails>> GetAssignMeTickets(string? me)
+    {
+        _logger.LogInformation("Attempting to retrieve tickets assigned to admin: {AdminId}", me);
+
+        try
+        {
+            var tickets = await _db
+                .Tickets
+                .Include(t => t.Comments)
+                    .ThenInclude(c => c.Author)
+                .Where(t => t.AssignedAdminId == me)
+                .OrderByDescending(t => t.UpdatedAt)
+                .Select(t => new TicketDetails(
+                    t.Id,
+                    t.Title,
+                    t.Description,
+                    t.Category,
+                    t.Status,
+                    t.Priority,
+                    t.CustomerId,
+                    t.AssignedAdminId,
+                    t.CreatedAt,
+                    t.UpdatedAt,
+                    t.Comments
+                        .OrderByDescending(c => c.CreatedAt)
+                        .Select(c => new TicketCommentDto(
+                            c.Id,
+                            c.AuthorId,
+                            c.Author!.Email ?? "",
+                            c.Message,
+                            c.CreatedAt
+                        ))
+                        .ToList()
+                ))
+                .ToListAsync();
+
+            _logger.LogInformation(
+                "Successfully retrieved {TicketCount} tickets assigned to admin: {AdminId}",
+                tickets.Count,
+                me
+            );
+
+            return tickets;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Failed to retrieve tickets assigned to admin: {AdminId}. Error: {ErrorMessage}",
+                me,
+                ex.Message
+            );
+            return new List<TicketDetails>();
+        }
+    }
+
+    private IQueryable<Ticket> ApplySorting(
+    IQueryable<Ticket> query,
+    string? sortBy,
+    bool ascending)
+    {
+        HashSet<string> AllowedSortColumns =
+        [
+            "Title",
+            "Description",
+            "Category",
+            "Status",
+            "Priority",
+            "UpdatedAt"
+        ];
+
+        var column = string.IsNullOrWhiteSpace(sortBy)
+            ? "UpdatedAt"
+            : sortBy;
+
+        if (!AllowedSortColumns.Contains(column))
+            column = "UpdatedAt";
+
+        return ascending
+            ? query.OrderBy(t => EF.Property<object>(t, column))
+            : query.OrderByDescending(t => EF.Property<object>(t, column));
     }
 }
