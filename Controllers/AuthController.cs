@@ -529,6 +529,7 @@ public class AuthController : ControllerBase
             return StatusCode(500, "An unexpected error occurred");
         }
     }
+    [Authorize]
     [HttpPatch("me")]
     public async Task<ActionResult<UserProfile>> UpdateUser([FromBody] UpdateUserRequest request)
     {
