@@ -563,9 +563,36 @@ public class AuthController : ControllerBase
             if (!string.IsNullOrWhiteSpace(request.Email))
             {
                 var newEmail = request.Email.Trim();
-                var setEmail = await _userManager.SetEmailAsync(user, newEmail);
-                if (!setEmail.Succeeded)
-                    return BadRequest(setEmail.Errors);
+
+                // Only process if the email actually changed
+                if (!string.Equals(user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
+                {
+                    var setEmail = await _userManager.SetEmailAsync(user, newEmail);
+                    if (!setEmail.Succeeded)
+                        return BadRequest(setEmail.Errors);
+
+                    // Mark email as unconfirmed until the new address is verified
+                    user.EmailConfirmed = false;
+
+                    // Generate email confirmation token and send confirmation email
+                    var code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+                    var callbackUrl = Url.Action(
+                        "ConfirmEmail",
+                        "Auth",
+                        new { userId = user.Id, code },
+                        protocol: Request.Scheme
+                    );
+
+                    if (!string.IsNullOrEmpty(callbackUrl))
+                    {
+                        var encodedUrl = System.Text.Encodings.Web.HtmlEncoder.Default.Encode(callbackUrl);
+                        await _emailSender.SendEmailAsync(
+                            newEmail,
+                            "Confirm your email",
+                            $"Please confirm your account by <a href='{encodedUrl}'>clicking here</a>."
+                        );
+                    }
+                }
             }
 
             var updateResult = await _userManager.UpdateAsync(user);
