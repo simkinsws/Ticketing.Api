@@ -529,7 +529,92 @@ public class AuthController : ControllerBase
             return StatusCode(500, "An unexpected error occurred");
         }
     }
+    [Authorize]
+    [HttpPatch("me")]
+    public async Task<ActionResult<UserProfile>> UpdateUser([FromBody] UpdateUserRequest request)
+    {
+        _logger.LogInformation("UpdateUser endpoint accessed from IP: {IpAddress}", GetClientIpAddress());
 
+        if (request is null)
+        {
+            _logger.LogWarning("UpdateUser endpoint - no user update request was found");
+
+            return BadRequest();
+        }
+        try
+        {
+            var user = await _userManager.GetUserAsync(User);
+
+            if (user is null) {
+                _logger.LogWarning("UpdateUser endpoint - User not found");
+                return Unauthorized();
+            }
+            if (!string.IsNullOrWhiteSpace(request.DisplayName))
+            {
+                user.DisplayName = request.DisplayName.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
+            {
+                var setPhone = await _userManager.SetPhoneNumberAsync(user, request.PhoneNumber.Trim());
+                if (!setPhone.Succeeded)
+                    return BadRequest(setPhone.Errors);
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.Email))
+            {
+                var newEmail = request.Email.Trim();
+
+                // Only process if the email actually changed
+                if (!string.Equals(user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
+                {
+                    var setEmail = await _userManager.SetEmailAsync(user, newEmail);
+                    if (!setEmail.Succeeded)
+                        return BadRequest(setEmail.Errors);
+
+                    // Mark email as unconfirmed until the new address is verified
+                    user.EmailConfirmed = false;
+
+                    // Generate email confirmation token and send confirmation email
+                    var code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+                    var callbackUrl = Url.Action(
+                        "ConfirmEmail",
+                        "Auth",
+                        new { userId = user.Id, code },
+                        protocol: Request.Scheme
+                    );
+
+                    if (!string.IsNullOrEmpty(callbackUrl))
+                    {
+                        var encodedUrl = System.Text.Encodings.Web.HtmlEncoder.Default.Encode(callbackUrl);
+                        await _emailSender.SendEmailAsync(
+                            newEmail,
+                            "Confirm your email",
+                            $"Please confirm your account by <a href='{encodedUrl}'>clicking here</a>."
+                        );
+                    }
+                }
+            }
+
+            var updateResult = await _userManager.UpdateAsync(user);
+            if (!updateResult.Succeeded)
+                return BadRequest(updateResult.Errors);
+
+            return Ok(new
+            {
+                user.Id,
+                user.DisplayName,
+                user.Email,
+                user.PhoneNumber
+            });
+
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "UpdateUser failed");
+            return StatusCode(500, "An unexpected error occurred.");
+        }
+    }
     private async Task<AuthResponse> IssueTokensAsync(ApplicationUser user)
     {
         try
