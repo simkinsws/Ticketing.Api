@@ -583,7 +583,7 @@ public class AuthController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "UpdateMe failed");
+            _logger.LogError(ex, "UpdateUser failed");
             return StatusCode(500, "An unexpected error occurred.");
         }
     }
