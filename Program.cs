@@ -22,9 +22,10 @@ builder.Host.UseSerilog((ctx, lc) =>
       .Enrich.WithProperty("Version", typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown")
       .WriteTo.Console();
 
+    var seqEnabled = ctx.Configuration.GetValue<bool>("Seq:Enabled", false);
     var seqUrl = ctx.Configuration["Seq:ServerUrl"];
 
-    if (Uri.TryCreate(seqUrl, UriKind.Absolute, out _))
+    if (seqEnabled && Uri.TryCreate(seqUrl, UriKind.Absolute, out _))
     {
         lc.WriteTo.Seq(seqUrl!);
     }

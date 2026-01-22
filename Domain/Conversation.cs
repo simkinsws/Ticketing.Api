@@ -11,6 +11,7 @@ public class Conversation
     public SenderType LastMessageSender { get; set; }
     public int UnreadForAdminCount { get; set; }
     public int UnreadForCustomerCount { get; set; }
+    public DateTime? LastCustomerReadAt { get; set; }
     public bool IsOpen { get; set; }
 
     // Navigation

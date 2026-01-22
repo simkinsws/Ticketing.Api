@@ -187,10 +187,10 @@ public class AuthController : ControllerBase
                     "Password reset requested for non-existent email: {Email}",
                     req.Email
                 );
-                return Ok(
+                return BadRequest(
                     new
                     {
-                        message = "If an account exists with this email, a password reset link will be sent.",
+                        message = "No account found with this email address. Please check your email or register for a new account.",
                     }
                 );
             }
@@ -312,7 +312,7 @@ public class AuthController : ControllerBase
                     req.Email,
                     ipAddress
                 );
-                return Unauthorized();
+                return BadRequest(new { message = "No account found with this email address. Please check your email or register for a new account." });
             }
 
             //TODO: Think if Email confirmation should be required (or can be deleted at all from register/login flow)
@@ -366,7 +366,7 @@ public class AuthController : ControllerBase
                     failedAttempts,
                     ipAddress
                 );
-                return Unauthorized();
+                return Unauthorized(new { message = "Incorrect password. Please try again or use 'Forgot Password' to reset it." });
             }
 
             _logger.LogInformation(
@@ -375,7 +375,7 @@ public class AuthController : ControllerBase
                 user.Id,
                 ipAddress
             );
-            return await IssueTokensAsync(user);
+            return await IssueTokensAsync(user, req.RememberMe);
         }
         catch (Exception ex)
         {
@@ -530,13 +530,22 @@ public class AuthController : ControllerBase
         }
     }
 
-    private async Task<AuthResponse> IssueTokensAsync(ApplicationUser user)
+    private async Task<AuthResponse> IssueTokensAsync(ApplicationUser user, bool rememberMe = false)
     {
         try
         {
             var (accessToken, expiresAt) = await _tokenService.CreateAccessTokenAsync(user);
 
-            var (refreshToken, refreshHash, refreshExpires) = _tokenService.CreateRefreshToken();
+            // If rememberMe is false, use a short-lived refresh token (same as access token duration)
+            // If rememberMe is true, use the configured refresh token duration
+
+            var refreshTokenDuration = rememberMe
+           ? TimeSpan.FromDays(_config.GetValue<int>("Jwt:RefreshTokenDays", 30))
+           : TimeSpan.FromMinutes(_config.GetValue<int>("Jwt:AccessTokenMinutes", 15));
+
+            var refreshExpires = DateTimeOffset.UtcNow.Add(refreshTokenDuration);
+
+            var (refreshToken, refreshHash, _) = _tokenService.CreateRefreshToken();
             await _tokenService.StoreRefreshTokenAsync(user.Id, refreshHash, refreshExpires);
 
             Response.Cookies.Append(

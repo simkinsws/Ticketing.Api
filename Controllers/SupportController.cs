@@ -33,8 +33,8 @@ public class SupportController : ControllerBase
 
         _logger.LogInformation("User {UserId} opening conversation", userId);
 
-        var conversationId = await _chatService.OpenConversationAsync(userId, displayName);
+        var (conversationId, unreadCount) = await _chatService.OpenConversationAsync(userId, displayName);
 
-        return Ok(new OpenConversationResponse(conversationId));
+        return Ok(new OpenConversationResponse(conversationId, unreadCount));
     }
 }
