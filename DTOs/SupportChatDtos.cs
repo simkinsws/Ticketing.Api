@@ -39,4 +39,6 @@ public record ConversationDetailDto(
     bool IsOpen
 );
 
-public record OpenConversationResponse(Guid ConversationId);
+public record OpenConversationResponse(Guid ConversationId, int UnreadForCustomerCount);
+
+public record MarkAsReadResponse(int UnreadCount);
