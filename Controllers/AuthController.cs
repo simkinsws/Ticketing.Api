@@ -538,17 +538,19 @@ public class AuthController : ControllerBase
         if (request is null)
         {
             _logger.LogWarning("UpdateUser endpoint - no user update request was found");
-
             return BadRequest();
         }
+
         try
         {
             var user = await _userManager.GetUserAsync(User);
 
-            if (user is null) {
+            if (user is null)
+            {
                 _logger.LogWarning("UpdateUser endpoint - User not found");
                 return Unauthorized();
             }
+
             if (!string.IsNullOrWhiteSpace(request.DisplayName))
             {
                 user.DisplayName = request.DisplayName.Trim();
@@ -564,6 +566,37 @@ public class AuthController : ControllerBase
             if (!string.IsNullOrWhiteSpace(request.Email))
             {
                 var newEmail = request.Email.Trim();
+                if (newEmail != user.Email)
+                {
+                    var setEmail = await _userManager.SetEmailAsync(user, newEmail);
+                    if (!setEmail.Succeeded)
+                        return BadRequest(setEmail.Errors);
+
+                    user.EmailConfirmed = false;
+                    _logger.LogInformation("Email changed for user {UserId}. Email confirmation required.", user.Id);
+                }
+            }
+
+            var updateResult = await _userManager.UpdateAsync(user);
+            if (!updateResult.Succeeded)
+            {
+                _logger.LogWarning("User update failed for {UserId}. Errors: {Errors}",
+                    user.Id,
+                    string.Join(", ", updateResult.Errors.Select(e => e.Description)));
+                return BadRequest(updateResult.Errors);
+            }
+
+            var roles = (await _userManager.GetRolesAsync(user)).ToArray();
+            _logger.LogInformation("User {UserId} updated successfully", user.Id);
+            
+            return new UserProfile(user.Id, user.Email ?? "", user.DisplayName ?? "", roles, User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error in UpdateUser endpoint. Error: {ErrorMessage}", ex.Message);
+            return StatusCode(500, "An unexpected error occurred");
+        }
+    }
 
     private async Task<AuthResponse> IssueTokensAsync(ApplicationUser user, bool rememberMe = false)
     {
