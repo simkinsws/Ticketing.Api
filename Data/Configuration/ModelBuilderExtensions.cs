@@ -114,6 +114,7 @@ public static class ModelBuilderExtensions
             b.Property(c => c.LastMessageAt).IsRequired();
             b.Property(c => c.UnreadForAdminCount).IsRequired();
             b.Property(c => c.UnreadForCustomerCount).IsRequired();
+            b.Property(c => c.LastCustomerReadAt).IsRequired(false);
             b.Property(c => c.IsOpen).IsRequired();
 
             b.HasIndex(c => c.CustomerUserId);

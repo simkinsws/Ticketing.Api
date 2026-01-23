@@ -187,10 +187,10 @@ public class AuthController : ControllerBase
                     "Password reset requested for non-existent email: {Email}",
                     req.Email
                 );
-                return Ok(
+                return BadRequest(
                     new
                     {
-                        message = "If an account exists with this email, a password reset link will be sent.",
+                        message = "No account found with this email address. Please check your email or register for a new account.",
                     }
                 );
             }
@@ -312,7 +312,7 @@ public class AuthController : ControllerBase
                     req.Email,
                     ipAddress
                 );
-                return Unauthorized();
+                return BadRequest(new { message = "No account found with this email address. Please check your email or register for a new account." });
             }
 
             //TODO: Think if Email confirmation should be required (or can be deleted at all from register/login flow)
@@ -366,7 +366,7 @@ public class AuthController : ControllerBase
                     failedAttempts,
                     ipAddress
                 );
-                return Unauthorized();
+                return Unauthorized(new { message = "Incorrect password. Please try again or use 'Forgot Password' to reset it." });
             }
 
             _logger.LogInformation(
@@ -375,7 +375,7 @@ public class AuthController : ControllerBase
                 user.Id,
                 ipAddress
             );
-            return await IssueTokensAsync(user);
+            return await IssueTokensAsync(user, req.RememberMe);
         }
         catch (Exception ex)
         {
@@ -538,17 +538,19 @@ public class AuthController : ControllerBase
         if (request is null)
         {
             _logger.LogWarning("UpdateUser endpoint - no user update request was found");
-
             return BadRequest();
         }
+
         try
         {
             var user = await _userManager.GetUserAsync(User);
 
-            if (user is null) {
+            if (user is null)
+            {
                 _logger.LogWarning("UpdateUser endpoint - User not found");
                 return Unauthorized();
             }
+
             if (!string.IsNullOrWhiteSpace(request.DisplayName))
             {
                 user.DisplayName = request.DisplayName.Trim();
@@ -569,64 +571,54 @@ public class AuthController : ControllerBase
             if (!string.IsNullOrWhiteSpace(request.Email))
             {
                 var newEmail = request.Email.Trim();
-
-                // Only process if the email actually changed
-                if (!string.Equals(user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
+                if (newEmail != user.Email)
                 {
                     var setEmail = await _userManager.SetEmailAsync(user, newEmail);
                     if (!setEmail.Succeeded)
                         return BadRequest(setEmail.Errors);
 
-                    // Mark email as unconfirmed until the new address is verified
                     user.EmailConfirmed = false;
-
-                    // Generate email confirmation token and send confirmation email
-                    var code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-                    var callbackUrl = Url.Action(
-                        "ConfirmEmail",
-                        "Auth",
-                        new { userId = user.Id, code },
-                        protocol: Request.Scheme
-                    );
-
-                    if (!string.IsNullOrEmpty(callbackUrl))
-                    {
-                        var encodedUrl = System.Text.Encodings.Web.HtmlEncoder.Default.Encode(callbackUrl);
-                        await _emailService.SendConfirmationEmailAsync(
-                            newEmail,
-                            $"Please confirm your account by <a href='{encodedUrl}'>clicking here</a>."
-                        );
-
-                    }
+                    _logger.LogInformation("Email changed for user {UserId}. Email confirmation required.", user.Id);
                 }
             }
 
             var updateResult = await _userManager.UpdateAsync(user);
             if (!updateResult.Succeeded)
-                return BadRequest(updateResult.Errors);
-
-            return Ok(new
             {
-                user.Id,
-                user.DisplayName,
-                user.Email,
-                user.PhoneNumber
-            });
+                _logger.LogWarning("User update failed for {UserId}. Errors: {Errors}",
+                    user.Id,
+                    string.Join(", ", updateResult.Errors.Select(e => e.Description)));
+                return BadRequest(updateResult.Errors);
+            }
 
+            var roles = (await _userManager.GetRolesAsync(user)).ToArray();
+            _logger.LogInformation("User {UserId} updated successfully", user.Id);
+            
+            return new UserProfile(user.Id, user.Email ?? "", user.DisplayName ?? "", roles, User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "UpdateUser failed");
-            return StatusCode(500, "An unexpected error occurred.");
+            _logger.LogError(ex, "Unexpected error in UpdateUser endpoint. Error: {ErrorMessage}", ex.Message);
+            return StatusCode(500, "An unexpected error occurred");
         }
     }
-    private async Task<AuthResponse> IssueTokensAsync(ApplicationUser user)
+
+    private async Task<AuthResponse> IssueTokensAsync(ApplicationUser user, bool rememberMe = false)
     {
         try
         {
             var (accessToken, expiresAt) = await _tokenService.CreateAccessTokenAsync(user);
 
-            var (refreshToken, refreshHash, refreshExpires) = _tokenService.CreateRefreshToken();
+            // If rememberMe is false, use a short-lived refresh token (same as access token duration)
+            // If rememberMe is true, use the configured refresh token duration
+
+            var refreshTokenDuration = rememberMe
+           ? TimeSpan.FromDays(_config.GetValue<int>("Jwt:RefreshTokenDays", 30))
+           : TimeSpan.FromMinutes(_config.GetValue<int>("Jwt:AccessTokenMinutes", 15));
+
+            var refreshExpires = DateTimeOffset.UtcNow.Add(refreshTokenDuration);
+
+            var (refreshToken, refreshHash, _) = _tokenService.CreateRefreshToken();
             await _tokenService.StoreRefreshTokenAsync(user.Id, refreshHash, refreshExpires);
 
             Response.Cookies.Append(

@@ -147,7 +147,7 @@ public class ChatController : ControllerBase
     }
 
     [HttpPost("conversations/{id}/read")]
-    public async Task<IActionResult> MarkAsRead(Guid id)
+    public async Task<ActionResult<MarkAsReadResponse>> MarkAsRead(Guid id)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userId))
@@ -181,9 +181,14 @@ public class ChatController : ControllerBase
                 // Broadcast updated unread counts
                 await _hubContext.Clients.Group("admins").SendAsync("ConversationUpserted", conversationDto);
                 await _hubContext.Clients.Group($"user:{conversation.CustomerUserId}").SendAsync("ConversationUpserted", conversationDto);
+
+                // Return the updated unread count in response
+                return Ok(new MarkAsReadResponse(
+                    isAdmin ? conversation.UnreadForAdminCount : conversation.UnreadForCustomerCount
+                ));
             }
 
-            return Ok();
+            return Ok(new MarkAsReadResponse(0));
         }
         catch (UnauthorizedAccessException ex)
         {
