@@ -529,6 +529,41 @@ public class AuthController : ControllerBase
             return StatusCode(500, "An unexpected error occurred");
         }
     }
+    [Authorize]
+    [HttpPatch("me")]
+    public async Task<ActionResult<UserProfile>> UpdateUser([FromBody] UpdateUserRequest request)
+    {
+        _logger.LogInformation("UpdateUser endpoint accessed from IP: {IpAddress}", GetClientIpAddress());
+
+        if (request is null)
+        {
+            _logger.LogWarning("UpdateUser endpoint - no user update request was found");
+
+            return BadRequest();
+        }
+        try
+        {
+            var user = await _userManager.GetUserAsync(User);
+
+            if (user is null) {
+                _logger.LogWarning("UpdateUser endpoint - User not found");
+                return Unauthorized();
+            }
+            if (!string.IsNullOrWhiteSpace(request.DisplayName))
+            {
+                user.DisplayName = request.DisplayName.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
+            {
+                var setPhone = await _userManager.SetPhoneNumberAsync(user, request.PhoneNumber.Trim());
+                if (!setPhone.Succeeded)
+                    return BadRequest(setPhone.Errors);
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.Email))
+            {
+                var newEmail = request.Email.Trim();
 
     private async Task<AuthResponse> IssueTokensAsync(ApplicationUser user, bool rememberMe = false)
     {

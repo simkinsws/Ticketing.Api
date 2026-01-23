@@ -16,3 +16,5 @@ public record AuthResponse(
 public record UserProfile(string Id, string Email, string DisplayName, string[] Roles, string? nameIdentifier = null);
 
 public record UserListItem(string Id, string Email, string UserName, string? DisplayName);
+
+public record UpdateUserRequest(string? DisplayName, string? PhoneNumber, string? Email);
