@@ -616,13 +616,15 @@ public class AuthController : ControllerBase
             var (refreshToken, refreshHash, _) = _tokenService.CreateRefreshToken();
             await _tokenService.StoreRefreshTokenAsync(user.Id, refreshHash, refreshExpires);
 
+            var isSecure = Request.IsHttps;
+
             Response.Cookies.Append(
                 RefreshCookieName,
                 refreshToken,
                 new CookieOptions
                 {
                     HttpOnly = true,
-                    Secure = false,
+                    Secure = isSecure,
                     SameSite = SameSiteMode.Lax,
                     Expires = refreshExpires.UtcDateTime,
                 }
@@ -634,7 +636,7 @@ public class AuthController : ControllerBase
                 new CookieOptions
                 {
                     HttpOnly = true,
-                    Secure = false,
+                    Secure = isSecure,
                     SameSite = SameSiteMode.Lax,
                     Expires = expiresAt.UtcDateTime,
                 }
