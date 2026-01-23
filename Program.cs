@@ -167,7 +167,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("DevCors", policy =>
     {
         policy
-            .WithOrigins("https://localhost:5173")
+            .WithOrigins("https://localhost:5173", "https://proud-pebble-0b53dc81e.2.azurestaticapps.net")
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
