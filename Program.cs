@@ -162,15 +162,20 @@ builder.Services.AddSwaggerGen(opt =>
     });
 });
 
+// CORS configuration
+var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() 
+    ?? new[] { "https://localhost:5173" };
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("DevCors", policy =>
+    options.AddPolicy("AppCors", policy =>
     {
         policy
-            .WithOrigins("https://localhost:5173", "https://proud-pebble-0b53dc81e.2.azurestaticapps.net")
+            .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod()
-            .AllowCredentials();
+            .AllowCredentials()
+            .SetIsOriginAllowedToAllowWildcardSubdomains(); // Allows *.azurestaticapps.net
     });
 });
 
@@ -184,7 +189,7 @@ app.UseSwagger();
 app.UseSwaggerUI();
 app.UseStaticFiles();
 
-app.UseCors("DevCors"); 
+app.UseCors("AppCors"); 
 
 app.UseRequestIdHeader();
 
