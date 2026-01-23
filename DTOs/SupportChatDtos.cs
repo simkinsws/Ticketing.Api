@@ -1,4 +1,4 @@
-using Ticketing.Api.Domain;
+using Ticketing.Api.Enums;
 
 namespace Ticketing.Api.DTOs;
 

@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using System.Security.Claims;
-using Ticketing.Api.Domain;
 using Ticketing.Api.DTOs;
+using Ticketing.Api.Enums;
 using Ticketing.Api.Hubs;
 using Ticketing.Api.Services;
 

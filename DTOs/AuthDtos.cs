@@ -1,3 +1,5 @@
+using Ticketing.Api.Enums;
+
 namespace Ticketing.Api.DTOs;
 
 public record RegisterRequest(string Email, string Password, string? DisplayName);
@@ -17,4 +19,4 @@ public record UserProfile(string Id, string Email, string DisplayName, string[] 
 
 public record UserListItem(string Id, string Email, string UserName, string? DisplayName);
 
-public record UpdateUserRequest(string? DisplayName, string? PhoneNumber, string? Email);
+public record UpdateUserRequest(string? DisplayName, string? PhoneNumber, PreferredLanguage? PreferredLanguage,string? Email);

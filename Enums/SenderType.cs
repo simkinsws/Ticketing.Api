@@ -1,4 +1,4 @@
-namespace Ticketing.Api.Domain;
+namespace Ticketing.Api.Enums;
 
 public enum SenderType
 {

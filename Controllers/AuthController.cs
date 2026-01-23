@@ -553,6 +553,11 @@ public class AuthController : ControllerBase
             {
                 user.DisplayName = request.DisplayName.Trim();
             }
+            
+            if (request.PreferredLanguage.HasValue)
+            {
+                user.PreferredLanguage = request.PreferredLanguage.Value;
+            }
 
             if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
             {
@@ -587,11 +592,11 @@ public class AuthController : ControllerBase
                     if (!string.IsNullOrEmpty(callbackUrl))
                     {
                         var encodedUrl = System.Text.Encodings.Web.HtmlEncoder.Default.Encode(callbackUrl);
-                        await _emailSender.SendEmailAsync(
+                        await _emailService.SendConfirmationEmailAsync(
                             newEmail,
-                            "Confirm your email",
                             $"Please confirm your account by <a href='{encodedUrl}'>clicking here</a>."
                         );
+
                     }
                 }
             }

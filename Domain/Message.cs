@@ -1,3 +1,4 @@
+using Ticketing.Api.Enums;
 namespace Ticketing.Api.Domain;
 
 public class Message
