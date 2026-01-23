@@ -200,13 +200,20 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+// Map SignalR hubs with CORS
+app.MapHub<NotificationHub>("/hubs/notifications")
+    .RequireAuthorization()
+    .RequireCors("AppCors");
+
+app.MapHub<SupportChatHub>("/hubs/support")
+    .RequireAuthorization()
+    .RequireCors("AppCors");
+
 
 if (app.Environment.IsDevelopment())
 {
     await app.SeedAsync();
 }
-app.MapHub<NotificationHub>("/hubs/notifications").RequireAuthorization();
-app.MapHub<SupportChatHub>("/hubs/support").RequireAuthorization();
 
 
 app.Run();
