@@ -98,9 +98,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         {
             OnMessageReceived = context =>
             {
-                // If this is a SignalR Hub request, allow token from query string or cookie
-                var path = context.HttpContext.Request.Path;
+                // 1. First, check if Authorization header is present (default JWT behavior)
+                //    No need to set context.Token - the middleware does this automatically
+                var authHeader = context.Request.Headers["Authorization"].ToString();
+                if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Let the default handler process it
+                    return Task.CompletedTask;
+                }
 
+                // 2. For SignalR Hubs, check query string
+                var path = context.HttpContext.Request.Path;
                 if (path.StartsWithSegments("/hubs/notifications") || path.StartsWithSegments("/hubs/support"))
                 {
                     var accessToken = context.Request.Query["access_token"];
@@ -111,7 +119,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     }
                 }
 
-                // Otherwise, fall back to cookie (your current approach)
+                // 3. Fall back to cookie (for backwards compatibility)
                 var cookieToken = context.Request.Cookies["access_token"];
                 if (!string.IsNullOrEmpty(cookieToken))
                 {
