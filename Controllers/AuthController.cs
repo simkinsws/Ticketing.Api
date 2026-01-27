@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using System.IdentityModel.Tokens.Jwt;
@@ -606,43 +606,70 @@ public class AuthController : ControllerBase
 
             // If rememberMe is false, use a short-lived refresh token (same as access token duration)
             // If rememberMe is true, use the configured refresh token duration
-
             var refreshTokenDuration = rememberMe
-           ? TimeSpan.FromDays(_config.GetValue<int>("Jwt:RefreshTokenDays", 30))
-           : TimeSpan.FromMinutes(_config.GetValue<int>("Jwt:AccessTokenMinutes", 15));
+                ? TimeSpan.FromDays(_config.GetValue<int>("Jwt:RefreshTokenDays", 30))
+                : TimeSpan.FromMinutes(_config.GetValue<int>("Jwt:AccessTokenMinutes", 15));
 
             var refreshExpires = DateTimeOffset.UtcNow.Add(refreshTokenDuration);
 
             var (refreshToken, refreshHash, _) = _tokenService.CreateRefreshToken();
             await _tokenService.StoreRefreshTokenAsync(user.Id, refreshHash, refreshExpires);
 
-            var isSecure = Request.IsHttps;
-            
-            var sameSiteMode = isSecure ? SameSiteMode.None : SameSiteMode.Lax;
+            // --- Cookie policy (IMPORTANT for iOS + cross-site) ---
+            // Production: MUST be SameSite=None + Secure=true for cross-origin XHR with credentials
+            var env = HttpContext.RequestServices.GetRequiredService<IHostEnvironment>();
+            var isDevelopment = env.IsDevelopment();
 
-            Response.Cookies.Append(
-                RefreshCookieName,
-                refreshToken,
-                new CookieOptions
-                {
-                    HttpOnly = true,
-                    Secure = isSecure,
-                    SameSite = sameSiteMode,
-                    Expires = refreshExpires.UtcDateTime,
-                }
-            );
+            // Trust forwarded proto if you enabled forwarded headers middleware.
+            // Otherwise Request.IsHttps might be false behind a proxy.
+            var isHttps =
+                Request.IsHttps ||
+                string.Equals(Request.Headers["X-Forwarded-Proto"].ToString(), "https", StringComparison.OrdinalIgnoreCase);
 
-            Response.Cookies.Append(
-                AccessTokenCookieName,
-                accessToken,
-                new CookieOptions
+            SameSiteMode sameSite;
+            bool secure;
+
+            if (!isDevelopment)
+            {
+                // ✅ Production (cross-site): required
+                sameSite = SameSiteMode.None;
+                secure = true;
+            }
+            else
+            {
+                // ✅ Development: keep your existing behavior, but allow HTTPS dev to work cross-site too
+                if (isHttps)
                 {
-                    HttpOnly = true,
-                    Secure = isSecure,
-                    SameSite = sameSiteMode,
-                    Expires = expiresAt.UtcDateTime,
+                    sameSite = SameSiteMode.None;
+                    secure = true;
                 }
-            );
+                else
+                {
+                    sameSite = SameSiteMode.Lax;
+                    secure = false;
+                }
+            }
+
+            var refreshCookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = secure,
+                SameSite = sameSite,
+                Expires = refreshExpires.UtcDateTime,
+                Path = "/", // recommended
+            };
+
+            var accessCookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = secure,
+                SameSite = sameSite,
+                Expires = expiresAt.UtcDateTime,
+                Path = "/", // recommended
+            };
+
+            Response.Cookies.Append(RefreshCookieName, refreshToken, refreshCookieOptions);
+            Response.Cookies.Append(AccessTokenCookieName, accessToken, accessCookieOptions);
 
             var roles = (await _userManager.GetRolesAsync(user)).ToArray();
             var profile = new UserProfile(user.Id, user.Email ?? "", user.DisplayName ?? "", roles);
@@ -661,6 +688,7 @@ public class AuthController : ControllerBase
             throw;
         }
     }
+
 
     private string GetClientIpAddress()
     {
