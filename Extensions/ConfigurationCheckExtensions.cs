@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 
 namespace Ticketing.Api.Extensions;
 
@@ -12,6 +12,7 @@ public static class ConfigurationCheckExtensions
         string? envBaseUrl = Environment.GetEnvironmentVariable("EmailConfirmation__BaseUrl");
 
         var cfgSeqUrl = app.Configuration["Seq:ServerUrl"];
+        var cfgSeqEnabled = app.Configuration.GetValue<bool>("Seq:Enabled", false);
         var cfgJwtKeyPresent = !string.IsNullOrWhiteSpace(app.Configuration["Jwt:Key"]);
         var cfgSendGridPresent = !string.IsNullOrWhiteSpace(app.Configuration["SendGridSettings:ApiKey"]);
         var cfgConnPresent = !string.IsNullOrWhiteSpace(app.Configuration.GetConnectionString("Default"));
@@ -29,9 +30,10 @@ public static class ConfigurationCheckExtensions
         bool isAppService = !string.IsNullOrWhiteSpace(app.Configuration["WEBSITE_INSTANCE_ID"]);
 
         app.Logger.LogInformation(
-            "CONFIG CHECK: Env={Env} IsAppService={IsAppService} SeqHost={SeqHost} SeqConfigured={SeqConfigured} SeqFromEnv={SeqFromEnv} JwtKeyPresent={JwtKeyPresent} JwtFromEnv={JwtFromEnv} SendGridKeyPresent={SendGridKeyPresent} SendGridFromEnv={SendGridFromEnv} ConnStringPresent={ConnStringPresent} BaseUrl={BaseUrl} BaseUrlFromEnv={BaseUrlFromEnv}",
+            "CONFIG CHECK: Env={Env} IsAppService={IsAppService} SeqEnabled={SeqEnabled} SeqHost={SeqHost} SeqConfigured={SeqConfigured} SeqFromEnv={SeqFromEnv} JwtKeyPresent={JwtKeyPresent} JwtFromEnv={JwtFromEnv} SendGridKeyPresent={SendGridKeyPresent} SendGridFromEnv={SendGridFromEnv} ConnStringPresent={ConnStringPresent} BaseUrl={BaseUrl} BaseUrlFromEnv={BaseUrlFromEnv}",
             app.Environment.EnvironmentName,
             isAppService,
+            cfgSeqEnabled,  // ← Shows if Seq logging is ON/OFF
             seqHost,
             !string.IsNullOrWhiteSpace(cfgSeqUrl),
             seqFromEnv,
