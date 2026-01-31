@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Ticketing.Api.Domain;
@@ -535,11 +536,12 @@ public class AuthController : ControllerBase
     {
         _logger.LogInformation("UpdateUser endpoint accessed from IP: {IpAddress}", GetClientIpAddress());
 
-        if (request is null)
+        if (string.IsNullOrWhiteSpace(request.DisplayName)
+            && string.IsNullOrWhiteSpace(request.PhoneNumber)
+            && string.IsNullOrWhiteSpace(request.Email))
         {
-            _logger.LogWarning("UpdateUser endpoint - no user update request was found");
-
-            return BadRequest();
+            _logger.LogWarning("UpdateUser endpoint - empty user update request");
+            return BadRequest("No fields provided to update.");
         }
         try
         {
@@ -549,71 +551,48 @@ public class AuthController : ControllerBase
                 _logger.LogWarning("UpdateUser endpoint - User not found");
                 return Unauthorized();
             }
-            // Store original values for rollback in case of validation failures
-            var originalPhoneNumber = user.PhoneNumber;
-            var originalEmail = user.Email;
-            var originalEmailConfirmed = user.EmailConfirmed;
-            var phoneNumberChanged = false;
-            var emailChanged = false;
-            
-            try
-            {
-                if (!string.IsNullOrWhiteSpace(request.DisplayName))
-                {
-                    user.DisplayName = request.DisplayName.Trim();
-                }
 
-                if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
+            // Apply and validate phone number if provided
+            if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
+            {
+                var phoneNumber = request.PhoneNumber.Trim();
+                var setPhone = await _userManager.SetPhoneNumberAsync(user, phoneNumber);
+                if (!setPhone.Succeeded)
+                    return BadRequest(setPhone.Errors);
+            }
+
+            // Apply and validate email changes if provided
+            string? callbackUrl = null;
+            string? code = null;
+            string? newEmail = null;
+            if (!string.IsNullOrWhiteSpace(request.Email))
+            {
+                newEmail = request.Email.Trim();
+
+                // Validate email format
+                if (!new EmailAddressAttribute().IsValid(newEmail))
                 {
-                    var setPhone = await _userManager.SetPhoneNumberAsync(user, request.PhoneNumber.Trim());
-                    if (!setPhone.Succeeded)
-                    {
-                        return BadRequest(setPhone.Errors);
-                    }
-                    phoneNumberChanged = true;
+                    _logger.LogWarning("UpdateUser endpoint - Invalid email format: {Email}", newEmail);
+                    return BadRequest(new[] { new IdentityError { Code = "InvalidEmail", Description = "The email address format is invalid." } });
                 }
 
                 if (!string.IsNullOrWhiteSpace(request.Email))
                 {
-                    var newEmail = request.Email.Trim();
+                    var setEmail = await _userManager.SetEmailAsync(user, newEmail);
+                    if (!setEmail.Succeeded)
+                        return BadRequest(setEmail.Errors);
 
-                    // Only process if the email actually changed
-                    if (!string.Equals(user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
-                    {
-                        emailChanged = true;
-                        var setEmail = await _userManager.SetEmailAsync(user, newEmail);
-                        if (!setEmail.Succeeded)
-                        {
-                            // Rollback phone number change if it was made
-                            await RollbackUserChangesAsync(user, phoneNumberChanged, false, originalPhoneNumber, originalEmail, originalEmailConfirmed);
-                            return BadRequest(setEmail.Errors);
-                        }
+                    // Mark email as unconfirmed until the new address is verified
+                    user.EmailConfirmed = false;
 
-                        // Mark email as unconfirmed until the new address is verified
-                        user.EmailConfirmed = false;
-
-                        // Generate email confirmation token and send confirmation email
-                        var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-                        var encodedToken = Uri.EscapeDataString(token);
-                        var baseUrl = _config["EmailConfirmation:BaseUrl"] ?? "http://localhost:5173";
-                        var confirmationLink = $"{baseUrl}/confirm-email?userId={user.Id}&token={encodedToken}";
-
-                        try
-                        {
-                            await _emailService.SendConfirmationEmailAsync(newEmail, confirmationLink);
-                            _logger.LogInformation("Email confirmation sent to new address: {Email}", newEmail);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(
-                                ex,
-                                "Failed to send confirmation email to: {Email}. Error: {ErrorMessage}",
-                                newEmail,
-                                ex.Message
-                            );
-                            // Continue even if email sending fails - user can request a new confirmation email
-                        }
-                    }
+                    // Generate email confirmation token and send confirmation email
+                    code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+                    callbackUrl = Url.Action(
+                        "ConfirmEmail",
+                        "Auth",
+                        new { userId = user.Id, code },
+                        protocol: Request.Scheme
+                    );
                 }
             }
             catch (Exception ex)
@@ -631,16 +610,28 @@ public class AuthController : ControllerBase
                 throw;
             }
 
+            // Apply display name change only after phone and email validations pass
+            if (!string.IsNullOrWhiteSpace(request.DisplayName))
+            {
+                user.DisplayName = request.DisplayName.Trim();
+            }
+
             var updateResult = await _userManager.UpdateAsync(user);
             if (!updateResult.Succeeded)
                 return BadRequest(updateResult.Errors);
 
+            // Send email confirmation after successful update
+            if (!string.IsNullOrEmpty(callbackUrl) && !string.IsNullOrEmpty(newEmail))
+            {
+                await _emailService.SendConfirmationEmailAsync(newEmail, callbackUrl);
+            }
+
             return Ok(new
             {
-                user.Id,
-                user.DisplayName,
-                user.Email,
-                user.PhoneNumber
+                Id = user.Id,
+                DisplayName = user.DisplayName,
+                Email = user.Email,
+                PhoneNumber = user.PhoneNumber
             });
 
         }
