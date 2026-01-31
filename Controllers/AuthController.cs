@@ -549,56 +549,75 @@ public class AuthController : ControllerBase
                 _logger.LogWarning("UpdateUser endpoint - User not found");
                 return Unauthorized();
             }
+
+            // Store original user ID for potential reload
+            var userId = user.Id;
+
+            // Apply and validate display name if provided
             if (!string.IsNullOrWhiteSpace(request.DisplayName))
             {
                 user.DisplayName = request.DisplayName.Trim();
             }
 
+            // Apply and validate phone number if provided
             if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
             {
-                var setPhone = await _userManager.SetPhoneNumberAsync(user, request.PhoneNumber.Trim());
+                var phoneNumber = request.PhoneNumber.Trim();
+                var setPhone = await _userManager.SetPhoneNumberAsync(user, phoneNumber);
                 if (!setPhone.Succeeded)
+                {
+                    // Reload user from database to discard in-memory changes
+                    await _userManager.FindByIdAsync(userId);
                     return BadRequest(setPhone.Errors);
+                }
             }
 
+            // Apply and validate email changes if provided
+            string? callbackUrl = null;
+            string? code = null;
+            string? newEmail = null;
             if (!string.IsNullOrWhiteSpace(request.Email))
             {
-                var newEmail = request.Email.Trim();
+                newEmail = request.Email.Trim();
 
                 // Only process if the email actually changed
                 if (!string.Equals(user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
                 {
                     var setEmail = await _userManager.SetEmailAsync(user, newEmail);
                     if (!setEmail.Succeeded)
+                    {
+                        // Reload user from database to discard in-memory changes
+                        await _userManager.FindByIdAsync(userId);
                         return BadRequest(setEmail.Errors);
+                    }
 
                     // Mark email as unconfirmed until the new address is verified
                     user.EmailConfirmed = false;
 
                     // Generate email confirmation token and send confirmation email
-                    var code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-                    var callbackUrl = Url.Action(
+                    code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+                    callbackUrl = Url.Action(
                         "ConfirmEmail",
                         "Auth",
                         new { userId = user.Id, code },
                         protocol: Request.Scheme
                     );
-
-                    if (!string.IsNullOrEmpty(callbackUrl))
-                    {
-                        var encodedUrl = System.Text.Encodings.Web.HtmlEncoder.Default.Encode(callbackUrl);
-                        await _emailSender.SendEmailAsync(
-                            newEmail,
-                            "Confirm your email",
-                            $"Please confirm your account by <a href='{encodedUrl}'>clicking here</a>."
-                        );
-                    }
                 }
             }
 
             var updateResult = await _userManager.UpdateAsync(user);
             if (!updateResult.Succeeded)
+            {
+                // Reload user from database to discard in-memory changes
+                await _userManager.FindByIdAsync(userId);
                 return BadRequest(updateResult.Errors);
+            }
+
+            // Send email confirmation after successful update
+            if (!string.IsNullOrEmpty(callbackUrl) && !string.IsNullOrEmpty(newEmail))
+            {
+                await _emailService.SendConfirmationEmailAsync(newEmail, callbackUrl);
+            }
 
             return Ok(new
             {
