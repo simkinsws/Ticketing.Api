@@ -578,13 +578,12 @@ public class AuthController : ControllerBase
 
                     // Generate email confirmation token and send confirmation email
                     var code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-                    var callbackUrl = Url.Action(
-                        "ConfirmEmail",
-                        "Auth",
-                        new { userId = user.Id, code },
-                        protocol: Request.Scheme
-                    );
 
+                    // Build a front-end confirmation URL that can handle the GET request and
+                    // then call the POST /auth/confirm-email endpoint with a JSON body.
+                    var encodedUserId = System.Net.WebUtility.UrlEncode(user.Id);
+                    var encodedCode = System.Net.WebUtility.UrlEncode(code);
+                    var callbackUrl = $"{Request.Scheme}://{Request.Host}/confirm-email?userId={encodedUserId}&code={encodedCode}";
                     if (!string.IsNullOrEmpty(callbackUrl))
                     {
                         var encodedUrl = System.Text.Encodings.Web.HtmlEncoder.Default.Encode(callbackUrl);
