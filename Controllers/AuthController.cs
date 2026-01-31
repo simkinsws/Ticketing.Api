@@ -553,6 +553,7 @@ public class AuthController : ControllerBase
             var originalPhoneNumber = user.PhoneNumber;
             var originalEmail = user.Email;
             var originalEmailConfirmed = user.EmailConfirmed;
+            var phoneNumberChanged = false;
             var emailChanged = false;
             
             try
@@ -569,6 +570,7 @@ public class AuthController : ControllerBase
                     {
                         return BadRequest(setPhone.Errors);
                     }
+                    phoneNumberChanged = true;
                 }
 
                 if (!string.IsNullOrWhiteSpace(request.Email))
@@ -583,9 +585,21 @@ public class AuthController : ControllerBase
                         if (!setEmail.Succeeded)
                         {
                             // Rollback phone number change if it was made
-                            if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
+                            if (phoneNumberChanged)
                             {
-                                await _userManager.SetPhoneNumberAsync(user, originalPhoneNumber);
+                                try
+                                {
+                                    await _userManager.SetPhoneNumberAsync(user, originalPhoneNumber);
+                                }
+                                catch (Exception rollbackEx)
+                                {
+                                    _logger.LogError(
+                                        rollbackEx,
+                                        "Failed to rollback phone number change for user {UserId}. Original: {OriginalPhone}",
+                                        user.Id,
+                                        originalPhoneNumber
+                                    );
+                                }
                             }
                             return BadRequest(setEmail.Errors);
                         }
@@ -617,17 +631,49 @@ public class AuthController : ControllerBase
                     }
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                // Log the exception before attempting rollback
+                _logger.LogError(
+                    ex,
+                    "Exception occurred during user update for {UserId}. Attempting to rollback changes. Error: {ErrorMessage}",
+                    user.Id,
+                    ex.Message
+                );
+
                 // Rollback all changes on any exception
-                if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
+                if (phoneNumberChanged)
                 {
-                    await _userManager.SetPhoneNumberAsync(user, originalPhoneNumber);
+                    try
+                    {
+                        await _userManager.SetPhoneNumberAsync(user, originalPhoneNumber);
+                    }
+                    catch (Exception rollbackEx)
+                    {
+                        _logger.LogError(
+                            rollbackEx,
+                            "Failed to rollback phone number change for user {UserId}. Original: {OriginalPhone}",
+                            user.Id,
+                            originalPhoneNumber
+                        );
+                    }
                 }
                 if (emailChanged)
                 {
-                    await _userManager.SetEmailAsync(user, originalEmail);
-                    user.EmailConfirmed = originalEmailConfirmed;
+                    try
+                    {
+                        await _userManager.SetEmailAsync(user, originalEmail);
+                        user.EmailConfirmed = originalEmailConfirmed;
+                    }
+                    catch (Exception rollbackEx)
+                    {
+                        _logger.LogError(
+                            rollbackEx,
+                            "Failed to rollback email change for user {UserId}. Original: {OriginalEmail}",
+                            user.Id,
+                            originalEmail
+                        );
+                    }
                 }
                 throw;
             }
