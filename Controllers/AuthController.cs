@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Ticketing.Api.Domain;
@@ -565,6 +566,14 @@ public class AuthController : ControllerBase
             {
                 var newEmail = request.Email.Trim();
 
+                // Validate email format
+                var emailValidator = new EmailAddressAttribute();
+                if (!emailValidator.IsValid(newEmail))
+                {
+                    _logger.LogWarning("UpdateUser endpoint - Invalid email format: {Email}", newEmail);
+                    return BadRequest(new { errors = new[] { new { code = "InvalidEmail", description = "The email address format is invalid." } } });
+                }
+
                 // Only process if the email actually changed
                 if (!string.Equals(user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
                 {
@@ -586,12 +595,7 @@ public class AuthController : ControllerBase
 
                     if (!string.IsNullOrEmpty(callbackUrl))
                     {
-                        var encodedUrl = System.Text.Encodings.Web.HtmlEncoder.Default.Encode(callbackUrl);
-                        await _emailSender.SendEmailAsync(
-                            newEmail,
-                            "Confirm your email",
-                            $"Please confirm your account by <a href='{encodedUrl}'>clicking here</a>."
-                        );
+                        await _emailService.SendConfirmationEmailAsync(newEmail, callbackUrl);
                     }
                 }
             }
