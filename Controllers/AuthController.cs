@@ -721,13 +721,22 @@ public class AuthController : ControllerBase
         {
             try
             {
-                await _userManager.SetPhoneNumberAsync(user, originalPhoneNumber);
+                var result = await _userManager.SetPhoneNumberAsync(user, originalPhoneNumber);
+                if (!result.Succeeded)
+                {
+                    _logger.LogError(
+                        "Failed to rollback phone number change for user {UserId}. Original: {OriginalPhone}. Errors: {Errors}",
+                        user.Id,
+                        originalPhoneNumber,
+                        string.Join(", ", result.Errors.Select(e => e.Description))
+                    );
+                }
             }
             catch (Exception rollbackEx)
             {
                 _logger.LogError(
                     rollbackEx,
-                    "Failed to rollback phone number change for user {UserId}. Original: {OriginalPhone}",
+                    "Exception during phone number rollback for user {UserId}. Original: {OriginalPhone}",
                     user.Id,
                     originalPhoneNumber
                 );
@@ -738,15 +747,35 @@ public class AuthController : ControllerBase
         {
             try
             {
-                await _userManager.SetEmailAsync(user, originalEmail);
-                user.EmailConfirmed = originalEmailConfirmed;
-                await _userManager.UpdateAsync(user);
+                var result = await _userManager.SetEmailAsync(user, originalEmail);
+                if (!result.Succeeded)
+                {
+                    _logger.LogError(
+                        "Failed to rollback email change for user {UserId}. Original: {OriginalEmail}. Errors: {Errors}",
+                        user.Id,
+                        originalEmail,
+                        string.Join(", ", result.Errors.Select(e => e.Description))
+                    );
+                }
+                else
+                {
+                    user.EmailConfirmed = originalEmailConfirmed;
+                    var updateResult = await _userManager.UpdateAsync(user);
+                    if (!updateResult.Succeeded)
+                    {
+                        _logger.LogError(
+                            "Failed to update EmailConfirmed during rollback for user {UserId}. Errors: {Errors}",
+                            user.Id,
+                            string.Join(", ", updateResult.Errors.Select(e => e.Description))
+                        );
+                    }
+                }
             }
             catch (Exception rollbackEx)
             {
                 _logger.LogError(
                     rollbackEx,
-                    "Failed to rollback email change for user {UserId}. Original: {OriginalEmail}",
+                    "Exception during email rollback for user {UserId}. Original: {OriginalEmail}",
                     user.Id,
                     originalEmail
                 );
