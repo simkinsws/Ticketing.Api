@@ -567,11 +567,10 @@ public class AuthController : ControllerBase
                 var newEmail = request.Email.Trim();
 
                 // Validate email format
-                var emailValidator = new EmailAddressAttribute();
-                if (!emailValidator.IsValid(newEmail))
+                if (!new EmailAddressAttribute().IsValid(newEmail))
                 {
                     _logger.LogWarning("UpdateUser endpoint - Invalid email format: {Email}", newEmail);
-                    return BadRequest(new { errors = new[] { new { code = "InvalidEmail", description = "The email address format is invalid." } } });
+                    return BadRequest(new[] { new IdentityError { Code = "InvalidEmail", Description = "The email address format is invalid." } });
                 }
 
                 // Only process if the email actually changed
