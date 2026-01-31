@@ -587,7 +587,7 @@ public class AuthController : ControllerBase
                     if (!string.IsNullOrEmpty(callbackUrl))
                     {
                         var encodedUrl = System.Text.Encodings.Web.HtmlEncoder.Default.Encode(callbackUrl);
-                        await _emailSender.SendEmailAsync(
+                        await _emailService.SendEmailAsync(
                             newEmail,
                             "Confirm your email",
                             $"Please confirm your account by <a href='{encodedUrl}'>clicking here</a>."
