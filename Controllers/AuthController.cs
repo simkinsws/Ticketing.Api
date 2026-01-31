@@ -535,11 +535,12 @@ public class AuthController : ControllerBase
     {
         _logger.LogInformation("UpdateUser endpoint accessed from IP: {IpAddress}", GetClientIpAddress());
 
-        if (request is null)
+        if (string.IsNullOrWhiteSpace(request.DisplayName)
+            && string.IsNullOrWhiteSpace(request.PhoneNumber)
+            && string.IsNullOrWhiteSpace(request.Email))
         {
-            _logger.LogWarning("UpdateUser endpoint - no user update request was found");
-
-            return BadRequest();
+            _logger.LogWarning("UpdateUser endpoint - empty user update request");
+            return BadRequest("No fields provided to update.");
         }
         try
         {
