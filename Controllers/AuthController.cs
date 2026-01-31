@@ -536,11 +536,12 @@ public class AuthController : ControllerBase
     {
         _logger.LogInformation("UpdateUser endpoint accessed from IP: {IpAddress}", GetClientIpAddress());
 
-        if (request is null)
+        if (string.IsNullOrWhiteSpace(request.DisplayName)
+            && string.IsNullOrWhiteSpace(request.PhoneNumber)
+            && string.IsNullOrWhiteSpace(request.Email))
         {
-            _logger.LogWarning("UpdateUser endpoint - no user update request was found");
-
-            return BadRequest();
+            _logger.LogWarning("UpdateUser endpoint - empty user update request");
+            return BadRequest("No fields provided to update.");
         }
         try
         {
@@ -585,13 +586,12 @@ public class AuthController : ControllerBase
 
                     // Generate email confirmation token and send confirmation email
                     var code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-                    var callbackUrl = Url.Action(
-                        "ConfirmEmail",
-                        "Auth",
-                        new { userId = user.Id, code },
-                        protocol: Request.Scheme
-                    );
 
+                    // Build a front-end confirmation URL that can handle the GET request and
+                    // then call the POST /auth/confirm-email endpoint with a JSON body.
+                    var encodedUserId = System.Net.WebUtility.UrlEncode(user.Id);
+                    var encodedCode = System.Net.WebUtility.UrlEncode(code);
+                    var callbackUrl = $"{Request.Scheme}://{Request.Host}/confirm-email?userId={encodedUserId}&code={encodedCode}";
                     if (!string.IsNullOrEmpty(callbackUrl))
                     {
                         await _emailService.SendConfirmationEmailAsync(newEmail, callbackUrl);
@@ -603,12 +603,12 @@ public class AuthController : ControllerBase
             if (!updateResult.Succeeded)
                 return BadRequest(updateResult.Errors);
 
-            return Ok(new
+            return Ok(new UserProfile
             {
-                user.Id,
-                user.DisplayName,
-                user.Email,
-                user.PhoneNumber
+                Id = user.Id,
+                DisplayName = user.DisplayName,
+                Email = user.Email,
+                PhoneNumber = user.PhoneNumber
             });
 
         }
