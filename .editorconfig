@@ -1,0 +1,34 @@
+root = true
+
+# All files
+[*]
+indent_style = space
+
+# Code files
+[*.{cs,csx,vb,vbx}]
+indent_size = 4
+insert_final_newline = true
+charset = utf-8-bom
+
+# .NET Code Analysis Rules
+[*.{cs,vb}]
+
+# CA2007: Consider calling ConfigureAwait on the awaited task
+dotnet_diagnostic.CA2007.severity = none
+
+# CA1515: Consider making public types internal
+dotnet_diagnostic.CA1515.severity = none
+
+# CA1848: Use the LoggerMessage delegates
+dotnet_diagnostic.CA1848.severity = none
+
+# CA1031: Do not catch general exception types
+dotnet_diagnostic.CA1031.severity = none
+
+# CA1062: Validate arguments of public methods
+dotnet_diagnostic.CA1062.severity = none
+# CA1727: Do not validate PascalCase for placeholders in logging
+dotnet_diagnostic.CA1727.severity = none
+
+# CA1305: Specify IFormatProvider (if you want to keep this enabled)
+# dotnet_diagnostic.CA1305.severity = warning

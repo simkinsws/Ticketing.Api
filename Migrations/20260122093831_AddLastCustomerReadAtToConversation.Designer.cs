@@ -11,8 +11,6 @@ using Ticketing.Api.Data;
 
 namespace Ticketing.Api.Migrations
 {
-    [DbContext(typeof(AppDbContext))]
-    [Migration("20260122093831_AddLastCustomerReadAtToConversation")]
     partial class AddLastCustomerReadAtToConversation
     {
         /// <inheritdoc />

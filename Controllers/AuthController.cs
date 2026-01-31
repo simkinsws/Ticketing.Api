@@ -576,38 +576,21 @@ public class AuthController : ControllerBase
                     return BadRequest(new[] { new IdentityError { Code = "InvalidEmail", Description = "The email address format is invalid." } });
                 }
 
-                if (!string.IsNullOrWhiteSpace(request.Email))
-                {
-                    var setEmail = await _userManager.SetEmailAsync(user, newEmail);
-                    if (!setEmail.Succeeded)
-                        return BadRequest(setEmail.Errors);
+                var setEmail = await _userManager.SetEmailAsync(user, newEmail);
+                if (!setEmail.Succeeded)
+                    return BadRequest(setEmail.Errors);
 
-                    // Mark email as unconfirmed until the new address is verified
-                    user.EmailConfirmed = false;
+                // Mark email as unconfirmed until the new address is verified
+                user.EmailConfirmed = false;
 
-                    // Generate email confirmation token and send confirmation email
-                    code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-                    callbackUrl = Url.Action(
-                        "ConfirmEmail",
-                        "Auth",
-                        new { userId = user.Id, code },
-                        protocol: Request.Scheme
-                    );
-                }
-            }
-            catch (Exception ex)
-            {
-                // Log the exception before attempting rollback
-                _logger.LogError(
-                    ex,
-                    "Exception occurred during user update for {UserId}. Attempting to rollback changes. Error: {ErrorMessage}",
-                    user.Id,
-                    ex.Message
+                // Generate email confirmation token and send confirmation email
+                code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+                callbackUrl = Url.Action(
+                    "ConfirmEmail",
+                    "Auth",
+                    new { userId = user.Id, code },
+                    protocol: Request.Scheme
                 );
-
-                // Rollback all changes on any exception
-                await RollbackUserChangesAsync(user, phoneNumberChanged, emailChanged, originalPhoneNumber, originalEmail, originalEmailConfirmed);
-                throw;
             }
 
             // Apply display name change only after phone and email validations pass
@@ -641,14 +624,12 @@ public class AuthController : ControllerBase
             return StatusCode(500, "An unexpected error occurred.");
         }
     }
-    private async Task<AuthResponse> IssueTokensAsync(ApplicationUser user)
+    private async Task<AuthResponse> IssueTokensAsync(ApplicationUser user, bool rememberMe = false)
     {
         try
         {
             var (accessToken, expiresAt) = await _tokenService.CreateAccessTokenAsync(user);
 
-            // If rememberMe is false, use a short-lived refresh token (same as access token duration)
-            // If rememberMe is true, use the configured refresh token duration
             var refreshTokenDuration = rememberMe
                 ? TimeSpan.FromDays(_config.GetValue<int>("Jwt:RefreshTokenDays", 30))
                 : TimeSpan.FromMinutes(_config.GetValue<int>("Jwt:AccessTokenMinutes", 15));
@@ -739,79 +720,5 @@ public class AuthController : ControllerBase
             return Request.Headers["X-Forwarded-For"].ToString().Split(',')[0].Trim();
 
         return HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
-    }
-
-    private async Task RollbackUserChangesAsync(
-        ApplicationUser user,
-        bool phoneNumberChanged,
-        bool emailChanged,
-        string? originalPhoneNumber,
-        string? originalEmail,
-        bool originalEmailConfirmed)
-    {
-        if (phoneNumberChanged)
-        {
-            try
-            {
-                var result = await _userManager.SetPhoneNumberAsync(user, originalPhoneNumber);
-                if (!result.Succeeded)
-                {
-                    _logger.LogError(
-                        "Failed to rollback phone number change for user {UserId}. Original: {OriginalPhone}. Errors: {Errors}",
-                        user.Id,
-                        originalPhoneNumber,
-                        string.Join(", ", result.Errors.Select(e => e.Description))
-                    );
-                }
-            }
-            catch (Exception rollbackEx)
-            {
-                _logger.LogError(
-                    rollbackEx,
-                    "Exception during phone number rollback for user {UserId}. Original: {OriginalPhone}",
-                    user.Id,
-                    originalPhoneNumber
-                );
-            }
-        }
-
-        if (emailChanged)
-        {
-            try
-            {
-                var result = await _userManager.SetEmailAsync(user, originalEmail);
-                if (!result.Succeeded)
-                {
-                    _logger.LogError(
-                        "Failed to rollback email change for user {UserId}. Original: {OriginalEmail}. Errors: {Errors}",
-                        user.Id,
-                        originalEmail,
-                        string.Join(", ", result.Errors.Select(e => e.Description))
-                    );
-                }
-                else
-                {
-                    user.EmailConfirmed = originalEmailConfirmed;
-                    var updateResult = await _userManager.UpdateAsync(user);
-                    if (!updateResult.Succeeded)
-                    {
-                        _logger.LogError(
-                            "Failed to update EmailConfirmed during rollback for user {UserId}. Errors: {Errors}",
-                            user.Id,
-                            string.Join(", ", updateResult.Errors.Select(e => e.Description))
-                        );
-                    }
-                }
-            }
-            catch (Exception rollbackEx)
-            {
-                _logger.LogError(
-                    rollbackEx,
-                    "Exception during email rollback for user {UserId}. Original: {OriginalEmail}",
-                    user.Id,
-                    originalEmail
-                );
-            }
-        }
     }
 }
