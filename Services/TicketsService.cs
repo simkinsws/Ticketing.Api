@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Ticketing.Api.Data;
 using Ticketing.Api.Domain;
 using Ticketing.Api.DTOs;
+using Ticketing.Api.Extensions;
 
 namespace Ticketing.Api.Services;
 
@@ -20,11 +21,13 @@ public class TicketsService : ITicketsService
 {
     private readonly AppDbContext _db;
     private readonly ILogger<TicketsService> _logger;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public TicketsService(AppDbContext db, ILogger<TicketsService> logger)
+    public TicketsService(AppDbContext db, ILogger<TicketsService> logger, IHttpContextAccessor httpContextAccessor)
     {
         _db = db;
         _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<Ticket?> GetTicketByIdAsync(Guid id)
@@ -58,8 +61,11 @@ public class TicketsService : ITicketsService
 
     public async Task<Ticket> AddTicketAsync(CreateTicketRequest req, string userId)
     {
+        var displayName = _httpContextAccessor.GetCurrentUserDisplayName();
+        
         _logger.LogInformation(
-            "Attempting to create new ticket for user with ID: {UserId}. Title: {Title}, Category: {Category}, Priority: {Priority}",
+            "Attempting to create new ticket for user {DisplayName} (ID: {UserId}). Title: {Title}, Category: {Category}, Priority: {Priority}",
+            displayName,
             userId,
             req.Title,
             req.Category,
@@ -84,8 +90,9 @@ public class TicketsService : ITicketsService
             await _db.SaveChangesAsync();
 
             _logger.LogInformation(
-                "Successfully created ticket with ID: {TicketId} for user with ID: {UserId}",
+                "Successfully created ticket with ID: {TicketId} for user {DisplayName} (ID: {UserId})",
                 ticket.Id,
+                displayName,
                 userId
             );
             return ticket;
@@ -94,7 +101,8 @@ public class TicketsService : ITicketsService
         {
             _logger.LogError(
                 ex,
-                "Failed to create ticket for user with ID: {UserId}. Error: {ErrorMessage}",
+                "Failed to create ticket for user {DisplayName} (ID: {UserId}). Error: {ErrorMessage}",
+                displayName,
                 userId,
                 ex.Message
             );
@@ -104,7 +112,9 @@ public class TicketsService : ITicketsService
 
     public async Task<List<TicketListItem>> GetMyTicketItemsAsync(string userId)
     {
-        _logger.LogInformation("Attempting to retrieve tickets for user with ID: {UserId}", userId);
+        var displayName = _httpContextAccessor.GetCurrentUserDisplayName();
+        
+        _logger.LogInformation("Attempting to retrieve tickets for user {DisplayName} (ID: {UserId})", displayName, userId);
 
         try
         {
@@ -123,8 +133,9 @@ public class TicketsService : ITicketsService
                 .ToListAsync();
 
             _logger.LogInformation(
-                "Successfully retrieved {TicketCount} tickets for user with ID: {UserId}",
+                "Successfully retrieved {TicketCount} tickets for user {DisplayName} (ID: {UserId})",
                 items.Count,
+                displayName,
                 userId
             );
             return items;
@@ -133,7 +144,8 @@ public class TicketsService : ITicketsService
         {
             _logger.LogError(
                 ex,
-                "Failed to retrieve tickets for user with ID: {UserId}. Error: {ErrorMessage}",
+                "Failed to retrieve tickets for user {DisplayName} (ID: {UserId}). Error: {ErrorMessage}",
+                displayName,
                 userId,
                 ex.Message
             );
@@ -216,9 +228,12 @@ public class TicketsService : ITicketsService
 
     public async Task AddCommentAsync(AddCommentRequest request, Ticket ticket, string userId)
     {
+        var displayName = _httpContextAccessor.GetCurrentUserDisplayName();
+        
         _logger.LogInformation(
-            "Attempting to add comment to ticket with ID: {TicketId} by user with ID: {UserId}",
+            "Attempting to add comment to ticket with ID: {TicketId} by user {DisplayName} (ID: {UserId})",
             ticket.Id,
+            displayName,
             userId
         );
 
@@ -237,8 +252,9 @@ public class TicketsService : ITicketsService
             await _db.SaveChangesAsync();
 
             _logger.LogInformation(
-                "Successfully added comment to ticket with ID: {TicketId} by user with ID: {UserId}",
+                "Successfully added comment to ticket with ID: {TicketId} by user {DisplayName} (ID: {UserId})",
                 ticket.Id,
+                displayName,
                 userId
             );
         }

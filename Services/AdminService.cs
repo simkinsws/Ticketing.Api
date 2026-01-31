@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Ticketing.Api.Data;
 using Ticketing.Api.Domain;
 using Ticketing.Api.DTOs;
+using Ticketing.Api.Extensions;
 
 namespace Ticketing.Api.Services;
 
@@ -47,12 +48,12 @@ public class AdminService : IAdminService
 
     public async Task<bool> DeleteByIdAsync(Guid id)
     {
-        var adminName =
-            _httpContextAccessor.HttpContext?.User?.FindFirst("display_name")?.Value
-            ?? "UnknownAdmin";
+        var (adminId, adminName) = _httpContextAccessor.GetCurrentUserInfo();
+        
         _logger.LogInformation(
-            "Admin {adminName} attempting to delete ticket with ID: {TicketId}",
+            "Admin {AdminName} (ID: {AdminId}) attempting to delete ticket with ID: {TicketId}",
             adminName,
+            adminId,
             id
         );
 
@@ -62,8 +63,9 @@ public class AdminService : IAdminService
             if (ticket is null)
             {
                 _logger.LogWarning(
-                    "Admin {adminName} attempted to delete non-existent ticket with ID: {TicketId}",
+                    "Admin {AdminName} (ID: {AdminId}) attempted to delete non-existent ticket with ID: {TicketId}",
                     adminName,
+                    adminId,
                     id
                 );
                 return false;
@@ -72,8 +74,9 @@ public class AdminService : IAdminService
             _db.Tickets.Remove(ticket);
             await _db.SaveChangesAsync();
             _logger.LogInformation(
-                "Admin {adminName} successfully deleted ticket with ID: {TicketId}",
+                "Admin {AdminName} (ID: {AdminId}) successfully deleted ticket with ID: {TicketId}",
                 adminName,
+                adminId,
                 id
             );
             return true;
@@ -82,8 +85,9 @@ public class AdminService : IAdminService
         {
             _logger.LogError(
                 ex,
-                "Admin {adminName} failed to delete ticket with ID: {TicketId}. Error: {ErrorMessage}",
+                "Admin {AdminName} (ID: {AdminId}) failed to delete ticket with ID: {TicketId}. Error: {ErrorMessage}",
                 adminName,
+                adminId,
                 id,
                 ex.Message
             );
@@ -93,15 +97,20 @@ public class AdminService : IAdminService
 
     public async Task<int> DeleteTicketsForUserAsync(string userId)
     {
-        _logger.LogInformation("Attempting to delete tickets for user with ID: {UserId}", userId);
+        // Get the user display name from database
+        var user = await _userManager.FindByIdAsync(userId);
+        var displayName = user?.DisplayName ?? "Unknown";
+        
+        _logger.LogInformation("Attempting to delete tickets for user {DisplayName} (ID: {UserId})", displayName, userId);
 
         try
         {
             var deleted = await _db.Tickets.Where(t => t.CustomerId == userId).ExecuteDeleteAsync();
 
             _logger.LogInformation(
-                "Successfully deleted {DeletedCount} tickets for user with ID: {UserId}",
+                "Successfully deleted {DeletedCount} tickets for user {DisplayName} (ID: {UserId})",
                 deleted,
+                displayName,
                 userId
             );
             return deleted;
@@ -110,7 +119,8 @@ public class AdminService : IAdminService
         {
             _logger.LogError(
                 ex,
-                "Failed to delete tickets for user with ID: {UserId}. Error: {ErrorMessage}",
+                "Failed to delete tickets for user {DisplayName} (ID: {UserId}). Error: {ErrorMessage}",
+                displayName,
                 userId,
                 ex.Message
             );
@@ -287,7 +297,10 @@ public class AdminService : IAdminService
 
     public async Task<List<TicketDetails>> GetAssignMeTickets(string? me)
     {
-        _logger.LogInformation("Attempting to retrieve tickets assigned to admin: {AdminId}", me);
+        var admin = me != null ? await _userManager.FindByIdAsync(me) : null;
+        var adminName = admin?.DisplayName ?? "Unknown";
+        
+        _logger.LogInformation("Attempting to retrieve tickets assigned to admin {AdminName} (ID: {AdminId})", adminName, me);
 
         try
         {
@@ -322,8 +335,9 @@ public class AdminService : IAdminService
                 .ToListAsync();
 
             _logger.LogInformation(
-                "Successfully retrieved {TicketCount} tickets assigned to admin: {AdminId}",
+                "Successfully retrieved {TicketCount} tickets assigned to admin {AdminName} (ID: {AdminId})",
                 tickets.Count,
+                adminName,
                 me
             );
 
@@ -333,7 +347,8 @@ public class AdminService : IAdminService
         {
             _logger.LogError(
                 ex,
-                "Failed to retrieve tickets assigned to admin: {AdminId}. Error: {ErrorMessage}",
+                "Failed to retrieve tickets assigned to admin {AdminName} (ID: {AdminId}). Error: {ErrorMessage}",
+                adminName,
                 me,
                 ex.Message
             );
