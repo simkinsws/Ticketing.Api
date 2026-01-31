@@ -549,51 +549,87 @@ public class AuthController : ControllerBase
                 _logger.LogWarning("UpdateUser endpoint - User not found");
                 return Unauthorized();
             }
-            if (!string.IsNullOrWhiteSpace(request.DisplayName))
+            // Store original values for rollback in case of validation failures
+            var originalPhoneNumber = user.PhoneNumber;
+            var originalEmail = user.Email;
+            var originalEmailConfirmed = user.EmailConfirmed;
+            var emailChanged = false;
+            
+            try
             {
-                user.DisplayName = request.DisplayName.Trim();
-            }
-
-            if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
-            {
-                var setPhone = await _userManager.SetPhoneNumberAsync(user, request.PhoneNumber.Trim());
-                if (!setPhone.Succeeded)
-                    return BadRequest(setPhone.Errors);
-            }
-
-            if (!string.IsNullOrWhiteSpace(request.Email))
-            {
-                var newEmail = request.Email.Trim();
-
-                // Only process if the email actually changed
-                if (!string.Equals(user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrWhiteSpace(request.DisplayName))
                 {
-                    var setEmail = await _userManager.SetEmailAsync(user, newEmail);
-                    if (!setEmail.Succeeded)
-                        return BadRequest(setEmail.Errors);
+                    user.DisplayName = request.DisplayName.Trim();
+                }
 
-                    // Mark email as unconfirmed until the new address is verified
-                    user.EmailConfirmed = false;
-
-                    // Generate email confirmation token and send confirmation email
-                    var code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-                    var callbackUrl = Url.Action(
-                        "ConfirmEmail",
-                        "Auth",
-                        new { userId = user.Id, code },
-                        protocol: Request.Scheme
-                    );
-
-                    if (!string.IsNullOrEmpty(callbackUrl))
+                if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
+                {
+                    var setPhone = await _userManager.SetPhoneNumberAsync(user, request.PhoneNumber.Trim());
+                    if (!setPhone.Succeeded)
                     {
-                        var encodedUrl = System.Text.Encodings.Web.HtmlEncoder.Default.Encode(callbackUrl);
-                        await _emailSender.SendEmailAsync(
-                            newEmail,
-                            "Confirm your email",
-                            $"Please confirm your account by <a href='{encodedUrl}'>clicking here</a>."
-                        );
+                        return BadRequest(setPhone.Errors);
                     }
                 }
+
+                if (!string.IsNullOrWhiteSpace(request.Email))
+                {
+                    var newEmail = request.Email.Trim();
+
+                    // Only process if the email actually changed
+                    if (!string.Equals(user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
+                    {
+                        emailChanged = true;
+                        var setEmail = await _userManager.SetEmailAsync(user, newEmail);
+                        if (!setEmail.Succeeded)
+                        {
+                            // Rollback phone number change if it was made
+                            if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
+                            {
+                                await _userManager.SetPhoneNumberAsync(user, originalPhoneNumber);
+                            }
+                            return BadRequest(setEmail.Errors);
+                        }
+
+                        // Mark email as unconfirmed until the new address is verified
+                        user.EmailConfirmed = false;
+
+                        // Generate email confirmation token and send confirmation email
+                        var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+                        var encodedToken = Uri.EscapeDataString(token);
+                        var baseUrl = _config["EmailConfirmation:BaseUrl"] ?? "http://localhost:5173";
+                        var confirmationLink = $"{baseUrl}/confirm-email?userId={user.Id}&token={encodedToken}";
+
+                        try
+                        {
+                            await _emailService.SendConfirmationEmailAsync(newEmail, confirmationLink);
+                            _logger.LogInformation("Email confirmation sent to new address: {Email}", newEmail);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(
+                                ex,
+                                "Failed to send confirmation email to: {Email}. Error: {ErrorMessage}",
+                                newEmail,
+                                ex.Message
+                            );
+                            // Continue even if email sending fails - user can request a new confirmation email
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // Rollback all changes on any exception
+                if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
+                {
+                    await _userManager.SetPhoneNumberAsync(user, originalPhoneNumber);
+                }
+                if (emailChanged)
+                {
+                    await _userManager.SetEmailAsync(user, originalEmail);
+                    user.EmailConfirmed = originalEmailConfirmed;
+                }
+                throw;
             }
 
             var updateResult = await _userManager.UpdateAsync(user);
