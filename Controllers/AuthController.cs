@@ -576,8 +576,7 @@ public class AuthController : ControllerBase
                     return BadRequest(new[] { new IdentityError { Code = "InvalidEmail", Description = "The email address format is invalid." } });
                 }
 
-                // Only process if the email actually changed
-                if (!string.Equals(user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrWhiteSpace(request.Email))
                 {
                     var setEmail = await _userManager.SetEmailAsync(user, newEmail);
                     if (!setEmail.Succeeded)
@@ -595,6 +594,20 @@ public class AuthController : ControllerBase
                         protocol: Request.Scheme
                     );
                 }
+            }
+            catch (Exception ex)
+            {
+                // Log the exception before attempting rollback
+                _logger.LogError(
+                    ex,
+                    "Exception occurred during user update for {UserId}. Attempting to rollback changes. Error: {ErrorMessage}",
+                    user.Id,
+                    ex.Message
+                );
+
+                // Rollback all changes on any exception
+                await RollbackUserChangesAsync(user, phoneNumberChanged, emailChanged, originalPhoneNumber, originalEmail, originalEmailConfirmed);
+                throw;
             }
 
             // Apply display name change only after phone and email validations pass
@@ -685,5 +698,79 @@ public class AuthController : ControllerBase
             return Request.Headers["X-Forwarded-For"].ToString().Split(',')[0].Trim();
 
         return HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
+    }
+
+    private async Task RollbackUserChangesAsync(
+        ApplicationUser user,
+        bool phoneNumberChanged,
+        bool emailChanged,
+        string? originalPhoneNumber,
+        string? originalEmail,
+        bool originalEmailConfirmed)
+    {
+        if (phoneNumberChanged)
+        {
+            try
+            {
+                var result = await _userManager.SetPhoneNumberAsync(user, originalPhoneNumber);
+                if (!result.Succeeded)
+                {
+                    _logger.LogError(
+                        "Failed to rollback phone number change for user {UserId}. Original: {OriginalPhone}. Errors: {Errors}",
+                        user.Id,
+                        originalPhoneNumber,
+                        string.Join(", ", result.Errors.Select(e => e.Description))
+                    );
+                }
+            }
+            catch (Exception rollbackEx)
+            {
+                _logger.LogError(
+                    rollbackEx,
+                    "Exception during phone number rollback for user {UserId}. Original: {OriginalPhone}",
+                    user.Id,
+                    originalPhoneNumber
+                );
+            }
+        }
+
+        if (emailChanged)
+        {
+            try
+            {
+                var result = await _userManager.SetEmailAsync(user, originalEmail);
+                if (!result.Succeeded)
+                {
+                    _logger.LogError(
+                        "Failed to rollback email change for user {UserId}. Original: {OriginalEmail}. Errors: {Errors}",
+                        user.Id,
+                        originalEmail,
+                        string.Join(", ", result.Errors.Select(e => e.Description))
+                    );
+                }
+                else
+                {
+                    user.EmailConfirmed = originalEmailConfirmed;
+                    var updateResult = await _userManager.UpdateAsync(user);
+                    if (!updateResult.Succeeded)
+                    {
+                        _logger.LogError(
+                            "Failed to update EmailConfirmed during rollback for user {UserId}. Errors: {Errors}",
+                            user.Id,
+                            string.Join(", ", updateResult.Errors.Select(e => e.Description))
+                        );
+                    }
+                }
+            }
+            catch (Exception rollbackEx)
+            {
+                _logger.LogError(
+                    rollbackEx,
+                    "Exception during email rollback for user {UserId}. Original: {OriginalEmail}",
+                    user.Id,
+                    originalEmail
+                );
+            }
+        }
     }
 }
