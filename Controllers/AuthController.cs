@@ -551,21 +551,23 @@ public class AuthController : ControllerBase
                 _logger.LogWarning("UpdateUser endpoint - User not found");
                 return Unauthorized();
             }
-            if (!string.IsNullOrWhiteSpace(request.DisplayName))
-            {
-                user.DisplayName = request.DisplayName.Trim();
-            }
 
+            // Apply and validate phone number if provided
             if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
             {
-                var setPhone = await _userManager.SetPhoneNumberAsync(user, request.PhoneNumber.Trim());
+                var phoneNumber = request.PhoneNumber.Trim();
+                var setPhone = await _userManager.SetPhoneNumberAsync(user, phoneNumber);
                 if (!setPhone.Succeeded)
                     return BadRequest(setPhone.Errors);
             }
 
+            // Apply and validate email changes if provided
+            string? callbackUrl = null;
+            string? code = null;
+            string? newEmail = null;
             if (!string.IsNullOrWhiteSpace(request.Email))
             {
-                var newEmail = request.Email.Trim();
+                newEmail = request.Email.Trim();
 
                 // Validate email format
                 if (!new EmailAddressAttribute().IsValid(newEmail))
@@ -585,25 +587,33 @@ public class AuthController : ControllerBase
                     user.EmailConfirmed = false;
 
                     // Generate email confirmation token and send confirmation email
-                    var code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-
-                    // Build a front-end confirmation URL that can handle the GET request and
-                    // then call the POST /auth/confirm-email endpoint with a JSON body.
-                    var encodedUserId = System.Net.WebUtility.UrlEncode(user.Id);
-                    var encodedCode = System.Net.WebUtility.UrlEncode(code);
-                    var callbackUrl = $"{Request.Scheme}://{Request.Host}/confirm-email?userId={encodedUserId}&code={encodedCode}";
-                    if (!string.IsNullOrEmpty(callbackUrl))
-                    {
-                        await _emailService.SendConfirmationEmailAsync(newEmail, callbackUrl);
-                    }
+                    code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+                    callbackUrl = Url.Action(
+                        "ConfirmEmail",
+                        "Auth",
+                        new { userId = user.Id, code },
+                        protocol: Request.Scheme
+                    );
                 }
+            }
+
+            // Apply display name change only after phone and email validations pass
+            if (!string.IsNullOrWhiteSpace(request.DisplayName))
+            {
+                user.DisplayName = request.DisplayName.Trim();
             }
 
             var updateResult = await _userManager.UpdateAsync(user);
             if (!updateResult.Succeeded)
                 return BadRequest(updateResult.Errors);
 
-            return Ok(new UserProfile
+            // Send email confirmation after successful update
+            if (!string.IsNullOrEmpty(callbackUrl) && !string.IsNullOrEmpty(newEmail))
+            {
+                await _emailService.SendConfirmationEmailAsync(newEmail, callbackUrl);
+            }
+
+            return Ok(new
             {
                 Id = user.Id,
                 DisplayName = user.DisplayName,
