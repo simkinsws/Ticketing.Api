@@ -600,12 +600,12 @@ public class AuthController : ControllerBase
             if (!updateResult.Succeeded)
                 return BadRequest(updateResult.Errors);
 
-            return Ok(new
+            return Ok(new UserProfile
             {
-                user.Id,
-                user.DisplayName,
-                user.Email,
-                user.PhoneNumber
+                Id = user.Id,
+                DisplayName = user.DisplayName,
+                Email = user.Email,
+                PhoneNumber = user.PhoneNumber
             });
 
         }
