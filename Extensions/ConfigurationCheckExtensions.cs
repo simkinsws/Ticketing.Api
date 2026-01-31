@@ -10,6 +10,7 @@ public static class ConfigurationCheckExtensions
         string? envJwtKey = Environment.GetEnvironmentVariable("Jwt__Key");
         string? envSendGridKey = Environment.GetEnvironmentVariable("SendGridSettings__ApiKey");
         string? envBaseUrl = Environment.GetEnvironmentVariable("EmailConfirmation__BaseUrl");
+        string? envSeqEnabled = Environment.GetEnvironmentVariable("Seq__Enabled");
 
         var cfgSeqUrl = app.Configuration["Seq:ServerUrl"];
         var cfgSeqEnabled = app.Configuration.GetValue<bool>("Seq:Enabled", false);
@@ -30,10 +31,11 @@ public static class ConfigurationCheckExtensions
         bool isAppService = !string.IsNullOrWhiteSpace(app.Configuration["WEBSITE_INSTANCE_ID"]);
 
         app.Logger.LogInformation(
-            "CONFIG CHECK: Env={Env} IsAppService={IsAppService} SeqEnabled={SeqEnabled} SeqHost={SeqHost} SeqConfigured={SeqConfigured} SeqFromEnv={SeqFromEnv} JwtKeyPresent={JwtKeyPresent} JwtFromEnv={JwtFromEnv} SendGridKeyPresent={SendGridKeyPresent} SendGridFromEnv={SendGridFromEnv} ConnStringPresent={ConnStringPresent} BaseUrl={BaseUrl} BaseUrlFromEnv={BaseUrlFromEnv}",
+            "CONFIG CHECK: Env={Env} IsAppService={IsAppService} SeqAppSettingsEnabled={SeqEnabled} SeqEnvEnabled={SeqProdEnvEnabled} SeqHost={SeqHost} SeqConfigured={SeqConfigured} SeqFromEnv={SeqFromEnv} JwtKeyPresent={JwtKeyPresent} JwtFromEnv={JwtFromEnv} SendGridKeyPresent={SendGridKeyPresent} SendGridFromEnv={SendGridFromEnv} ConnStringPresent={ConnStringPresent} BaseUrl={BaseUrl} BaseUrlFromEnv={BaseUrlFromEnv}",
             app.Environment.EnvironmentName,
             isAppService,
-            cfgSeqEnabled,  // ← Shows if Seq logging is ON/OFF
+            cfgSeqEnabled,
+            envSeqEnabled,
             seqHost,
             !string.IsNullOrWhiteSpace(cfgSeqUrl),
             seqFromEnv,

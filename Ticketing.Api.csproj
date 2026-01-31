@@ -1,16 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);1591</NoWarn>
-    <UserSecretsId>eb48fd68-3ec7-46a6-b678-8dcc138eb621</UserSecretsId>
-    <!-- Enable real-time error detection & code analysis -->
-    <EnableNETAnalyzers>true</EnableNETAnalyzers>
-    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-    <AnalysisLevel>latest</AnalysisLevel>
-  </PropertyGroup>
+<PropertyGroup>
+  <TargetFramework>net8.0</TargetFramework>
+  <Nullable>enable</Nullable>
+  <ImplicitUsings>enable</ImplicitUsings>
+  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  <NoWarn>$(NoWarn);1591</NoWarn>
+  <UserSecretsId>eb48fd68-3ec7-46a6-b678-8dcc138eb621</UserSecretsId>
+  <!-- Enable real-time error detection & code analysis -->
+  <EnableNETAnalyzers>true</EnableNETAnalyzers>
+  <AnalysisLevel>latest</AnalysisLevel>
+  <AnalysisMode>AllEnabledByDefault</AnalysisMode>
+  <RunAnalyzersDuringBuild>true</RunAnalyzersDuringBuild>
+  <RunAnalyzersDuringLiveAnalysis>true</RunAnalyzersDuringLiveAnalysis>
+</PropertyGroup>
 
 <ItemGroup>
   <PackageReference Include="Azure.Storage.Blobs" Version="12.27.0" />
