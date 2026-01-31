@@ -1,3 +1,4 @@
+using Azure.Storage.Blobs;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
@@ -21,14 +22,14 @@ builder.Host.UseSerilog((ctx, lc) =>
       .Enrich.WithProperty("Environment", ctx.HostingEnvironment.EnvironmentName)
       .Enrich.WithProperty("Service", "Ticketing.Api")
       .Enrich.WithProperty("Version", typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown")
-      .WriteTo.Console();
+      .WriteTo.Console(formatProvider: System.Globalization.CultureInfo.InvariantCulture);
 
     var seqEnabled = ctx.Configuration.GetValue<bool>("Seq:Enabled", false);
     var seqUrl = ctx.Configuration["Seq:ServerUrl"];
 
     if (seqEnabled && Uri.TryCreate(seqUrl, UriKind.Absolute, out _))
     {
-        lc.WriteTo.Seq(seqUrl!);
+        lc.WriteTo.Seq(seqUrl!, formatProvider: System.Globalization.CultureInfo.InvariantCulture);
     }
 });
 
@@ -98,18 +99,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         {
             OnMessageReceived = context =>
             {
-                // 1. First, check if Authorization header is present (default JWT behavior)
-                //    No need to set context.Token - the middleware does this automatically
                 var authHeader = context.Request.Headers["Authorization"].ToString();
                 if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Let the default handler process it
                     return Task.CompletedTask;
                 }
 
-                // 2. For SignalR Hubs, check query string
                 var path = context.HttpContext.Request.Path;
-                if (path.StartsWithSegments("/hubs/notifications") || path.StartsWithSegments("/hubs/support"))
+                if (path.StartsWithSegments("/hubs/notifications", StringComparison.InvariantCultureIgnoreCase) || path.StartsWithSegments("/hubs/support", StringComparison.InvariantCultureIgnoreCase))
                 {
                     var accessToken = context.Request.Query["access_token"];
                     if (!string.IsNullOrEmpty(accessToken))
@@ -119,7 +116,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     }
                 }
 
-                // 3. Fall back to cookie (for backwards compatibility)
                 var cookieToken = context.Request.Cookies["access_token"];
                 if (!string.IsNullOrEmpty(cookieToken))
                 {
@@ -134,6 +130,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 builder.Services.AddHttpContextAccessor();
+
+// Azure Blob Storage
+var blobConnectionString = builder.Configuration["FileStorage:Azure:ConnectionString"];
+if (!string.IsNullOrWhiteSpace(blobConnectionString))
+{
+    builder.Services.AddSingleton(x => new BlobServiceClient(blobConnectionString));
+    builder.Services.AddSingleton<IAzureBlobProvider, AzureBlobProvider>();
+}
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
@@ -185,7 +189,7 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod()
             .AllowCredentials()
             .WithExposedHeaders("Set-Cookie")
-            .SetIsOriginAllowedToAllowWildcardSubdomains(); // Allows *.azurestaticapps.net
+            .SetIsOriginAllowedToAllowWildcardSubdomains();
     });
 });
 
@@ -198,7 +202,13 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 
 app.LogConfigurationCheck();
 
-await app.ApplyMigrationsAsync(app.Environment);
+await app.ApplyMigrationsAsync(app.Environment).ConfigureAwait(false);
+
+if (app.Environment.IsDevelopment())
+{
+    await app.SeedAsync().ConfigureAwait(false);
+}
+
 
 app.UseSwagger();
 app.UseSwaggerUI();
@@ -225,10 +235,4 @@ app.MapHub<SupportChatHub>("/hubs/support")
     .RequireCors("AppCors");
 
 
-if (app.Environment.IsDevelopment())
-{
-    await app.SeedAsync();
-}
-
-
-app.Run();
+await app.RunAsync().ConfigureAwait(false);
