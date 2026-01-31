@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using System.ComponentModel.DataAnnotations;
@@ -188,10 +188,10 @@ public class AuthController : ControllerBase
                     "Password reset requested for non-existent email: {Email}",
                     req.Email
                 );
-                return Ok(
+                return BadRequest(
                     new
                     {
-                        message = "If an account exists with this email, a password reset link will be sent.",
+                        message = "No account found with this email address. Please check your email or register for a new account.",
                     }
                 );
             }
@@ -313,7 +313,7 @@ public class AuthController : ControllerBase
                     req.Email,
                     ipAddress
                 );
-                return Unauthorized();
+                return BadRequest(new { message = "No account found with this email address. Please check your email or register for a new account." });
             }
 
             //TODO: Think if Email confirmation should be required (or can be deleted at all from register/login flow)
@@ -367,7 +367,7 @@ public class AuthController : ControllerBase
                     failedAttempts,
                     ipAddress
                 );
-                return Unauthorized();
+                return Unauthorized(new { message = "Incorrect password. Please try again or use 'Forgot Password' to reset it." });
             }
 
             _logger.LogInformation(
@@ -376,7 +376,7 @@ public class AuthController : ControllerBase
                 user.Id,
                 ipAddress
             );
-            return await IssueTokensAsync(user);
+            return await IssueTokensAsync(user, req.RememberMe);
         }
         catch (Exception ex)
         {
@@ -647,32 +647,72 @@ public class AuthController : ControllerBase
         {
             var (accessToken, expiresAt) = await _tokenService.CreateAccessTokenAsync(user);
 
-            var (refreshToken, refreshHash, refreshExpires) = _tokenService.CreateRefreshToken();
+            // If rememberMe is false, use a short-lived refresh token (same as access token duration)
+            // If rememberMe is true, use the configured refresh token duration
+            var refreshTokenDuration = rememberMe
+                ? TimeSpan.FromDays(_config.GetValue<int>("Jwt:RefreshTokenDays", 30))
+                : TimeSpan.FromMinutes(_config.GetValue<int>("Jwt:AccessTokenMinutes", 15));
+
+            var refreshExpires = DateTimeOffset.UtcNow.Add(refreshTokenDuration);
+
+            var (refreshToken, refreshHash, _) = _tokenService.CreateRefreshToken();
             await _tokenService.StoreRefreshTokenAsync(user.Id, refreshHash, refreshExpires);
 
-            Response.Cookies.Append(
-                RefreshCookieName,
-                refreshToken,
-                new CookieOptions
-                {
-                    HttpOnly = true,
-                    Secure = false,
-                    SameSite = SameSiteMode.Lax,
-                    Expires = refreshExpires.UtcDateTime,
-                }
-            );
+            // --- Cookie policy (IMPORTANT for iOS + cross-site) ---
+            // Production: MUST be SameSite=None + Secure=true for cross-origin XHR with credentials
+            var env = HttpContext.RequestServices.GetRequiredService<IHostEnvironment>();
+            var isDevelopment = env.IsDevelopment();
 
-            Response.Cookies.Append(
-                AccessTokenCookieName,
-                accessToken,
-                new CookieOptions
+            // Trust forwarded proto if you enabled forwarded headers middleware.
+            // Otherwise Request.IsHttps might be false behind a proxy.
+            var isHttps =
+                Request.IsHttps ||
+                string.Equals(Request.Headers["X-Forwarded-Proto"].ToString(), "https", StringComparison.OrdinalIgnoreCase);
+
+            SameSiteMode sameSite;
+            bool secure;
+
+            if (!isDevelopment)
+            {
+                // ✅ Production (cross-site): required
+                sameSite = SameSiteMode.None;
+                secure = true;
+            }
+            else
+            {
+                // ✅ Development: keep your existing behavior, but allow HTTPS dev to work cross-site too
+                if (isHttps)
                 {
-                    HttpOnly = true,
-                    Secure = false,
-                    SameSite = SameSiteMode.Lax,
-                    Expires = expiresAt.UtcDateTime,
+                    sameSite = SameSiteMode.None;
+                    secure = true;
                 }
-            );
+                else
+                {
+                    sameSite = SameSiteMode.Lax;
+                    secure = false;
+                }
+            }
+
+            var refreshCookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = secure,
+                SameSite = sameSite,
+                Expires = refreshExpires.UtcDateTime,
+                Path = "/", // recommended
+            };
+
+            var accessCookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = secure,
+                SameSite = sameSite,
+                Expires = expiresAt.UtcDateTime,
+                Path = "/", // recommended
+            };
+
+            Response.Cookies.Append(RefreshCookieName, refreshToken, refreshCookieOptions);
+            Response.Cookies.Append(AccessTokenCookieName, accessToken, accessCookieOptions);
 
             var roles = (await _userManager.GetRolesAsync(user)).ToArray();
             var profile = new UserProfile(user.Id, user.Email ?? "", user.DisplayName ?? "", roles);
@@ -691,6 +731,7 @@ public class AuthController : ControllerBase
             throw;
         }
     }
+
 
     private string GetClientIpAddress()
     {

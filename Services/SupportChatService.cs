@@ -7,7 +7,7 @@ namespace Ticketing.Api.Services;
 
 public interface ISupportChatService
 {
-    Task<Guid> OpenConversationAsync(string customerUserId, string customerDisplayName);
+    Task<(Guid ConversationId, int UnreadCount)> OpenConversationAsync(string customerUserId, string customerDisplayName);
     Task<ConversationListItemDto[]> GetAdminInboxAsync();
     Task<ConversationDetailDto?> GetConversationByIdAsync(Guid conversationId, string requestingUserId, bool isAdmin);
     Task<MessageDto[]> GetConversationMessagesAsync(Guid conversationId, string requestingUserId, bool isAdmin);
@@ -26,7 +26,7 @@ public class SupportChatService : ISupportChatService
         _logger = logger;
     }
 
-    public async Task<Guid> OpenConversationAsync(string customerUserId, string customerDisplayName)
+    public async Task<(Guid ConversationId, int UnreadCount)> OpenConversationAsync(string customerUserId, string customerDisplayName)
     {
         // Check if customer already has an open conversation
         var existing = await _context.Conversations
@@ -35,8 +35,23 @@ public class SupportChatService : ISupportChatService
 
         if (existing != null)
         {
-            _logger.LogInformation("Returning existing conversation {ConversationId} for customer {CustomerId}", existing.Id, customerUserId);
-            return existing.Id;
+            // Recalculate unread count based on LastCustomerReadAt
+            // This ensures count is accurate after customer logs back in
+            if (existing.LastCustomerReadAt.HasValue)
+            {
+                var unreadCount = await _context.Messages
+                    .Where(m => m.ConversationId == existing.Id 
+                        && m.SenderType == SenderType.Admin 
+                        && m.CreatedAt > existing.LastCustomerReadAt.Value)
+                    .CountAsync();
+                
+                existing.UnreadForCustomerCount = unreadCount;
+                await _context.SaveChangesAsync();
+            }
+            
+            _logger.LogInformation("Returning existing conversation {ConversationId} for customer {CustomerId} with {UnreadCount} unread messages", 
+                existing.Id, customerUserId, existing.UnreadForCustomerCount);
+            return (existing.Id, existing.UnreadForCustomerCount);
         }
 
         // Create new conversation
@@ -51,6 +66,7 @@ public class SupportChatService : ISupportChatService
             LastMessageSender = SenderType.Customer,
             UnreadForAdminCount = 0,
             UnreadForCustomerCount = 0,
+            LastCustomerReadAt = DateTime.UtcNow, // Initialize to now since no messages exist yet
             IsOpen = true
         };
 
@@ -58,7 +74,7 @@ public class SupportChatService : ISupportChatService
         await _context.SaveChangesAsync();
 
         _logger.LogInformation("Created new conversation {ConversationId} for customer {CustomerId}", conversation.Id, customerUserId);
-        return conversation.Id;
+        return (conversation.Id, conversation.UnreadForCustomerCount);
     }
 
     public async Task<ConversationListItemDto[]> GetAdminInboxAsync()
@@ -179,13 +195,16 @@ public class SupportChatService : ISupportChatService
         conversation.LastMessagePreview = text.Length > 200 ? text.Substring(0, 200) : text;
         conversation.LastMessageSender = senderType;
 
-        // Update unread counts
+        // Update unread counts based on sender type
         if (senderType == SenderType.Customer)
         {
+            // Customer sent message - increment admin unread count
             conversation.UnreadForAdminCount++;
         }
         else
         {
+            // Admin sent message - increment customer unread count
+            // This respects persistence: customer will see this count even after logout/login
             conversation.UnreadForCustomerCount++;
         }
 
@@ -226,6 +245,8 @@ public class SupportChatService : ISupportChatService
         }
         else
         {
+            // For customers: set timestamp and reset unread count
+            conversation.LastCustomerReadAt = DateTime.UtcNow;
             conversation.UnreadForCustomerCount = 0;
         }
 

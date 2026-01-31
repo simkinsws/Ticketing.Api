@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -22,9 +23,10 @@ builder.Host.UseSerilog((ctx, lc) =>
       .Enrich.WithProperty("Version", typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown")
       .WriteTo.Console();
 
+    var seqEnabled = ctx.Configuration.GetValue<bool>("Seq:Enabled", false);
     var seqUrl = ctx.Configuration["Seq:ServerUrl"];
 
-    if (Uri.TryCreate(seqUrl, UriKind.Absolute, out _))
+    if (seqEnabled && Uri.TryCreate(seqUrl, UriKind.Absolute, out _))
     {
         lc.WriteTo.Seq(seqUrl!);
     }
@@ -96,9 +98,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         {
             OnMessageReceived = context =>
             {
-                // If this is a SignalR Hub request, allow token from query string or cookie
-                var path = context.HttpContext.Request.Path;
+                // 1. First, check if Authorization header is present (default JWT behavior)
+                //    No need to set context.Token - the middleware does this automatically
+                var authHeader = context.Request.Headers["Authorization"].ToString();
+                if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Let the default handler process it
+                    return Task.CompletedTask;
+                }
 
+                // 2. For SignalR Hubs, check query string
+                var path = context.HttpContext.Request.Path;
                 if (path.StartsWithSegments("/hubs/notifications") || path.StartsWithSegments("/hubs/support"))
                 {
                     var accessToken = context.Request.Query["access_token"];
@@ -109,7 +119,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     }
                 }
 
-                // Otherwise, fall back to cookie (your current approach)
+                // 3. Fall back to cookie (for backwards compatibility)
                 var cookieToken = context.Request.Cookies["access_token"];
                 if (!string.IsNullOrEmpty(cookieToken))
                 {
@@ -161,19 +171,30 @@ builder.Services.AddSwaggerGen(opt =>
     });
 });
 
+// CORS configuration
+var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() 
+    ?? new[] { "https://localhost:5173" };
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("DevCors", policy =>
+    options.AddPolicy("AppCors", policy =>
     {
         policy
-            .WithOrigins("https://localhost:5173")
+            .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod()
-            .AllowCredentials();
+            .AllowCredentials()
+            .WithExposedHeaders("Set-Cookie")
+            .SetIsOriginAllowedToAllowWildcardSubdomains(); // Allows *.azurestaticapps.net
     });
 });
 
 var app = builder.Build();
+
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
 
 app.LogConfigurationCheck();
 
@@ -183,7 +204,7 @@ app.UseSwagger();
 app.UseSwaggerUI();
 app.UseStaticFiles();
 
-app.UseCors("DevCors"); 
+app.UseCors("AppCors"); 
 
 app.UseRequestIdHeader();
 
@@ -194,13 +215,20 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+// Map SignalR hubs with CORS
+app.MapHub<NotificationHub>("/hubs/notifications")
+    .RequireAuthorization()
+    .RequireCors("AppCors");
+
+app.MapHub<SupportChatHub>("/hubs/support")
+    .RequireAuthorization()
+    .RequireCors("AppCors");
+
 
 if (app.Environment.IsDevelopment())
 {
     await app.SeedAsync();
 }
-app.MapHub<NotificationHub>("/hubs/notifications").RequireAuthorization();
-app.MapHub<SupportChatHub>("/hubs/support").RequireAuthorization();
 
 
 app.Run();
