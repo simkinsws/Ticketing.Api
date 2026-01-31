@@ -550,26 +550,13 @@ public class AuthController : ControllerBase
                 return Unauthorized();
             }
 
-            // Store original user ID for potential reload
-            var userId = user.Id;
-
-            // Apply and validate display name if provided
-            if (!string.IsNullOrWhiteSpace(request.DisplayName))
-            {
-                user.DisplayName = request.DisplayName.Trim();
-            }
-
             // Apply and validate phone number if provided
             if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
             {
                 var phoneNumber = request.PhoneNumber.Trim();
                 var setPhone = await _userManager.SetPhoneNumberAsync(user, phoneNumber);
                 if (!setPhone.Succeeded)
-                {
-                    // Reload user from database to discard in-memory changes
-                    await _userManager.FindByIdAsync(userId);
                     return BadRequest(setPhone.Errors);
-                }
             }
 
             // Apply and validate email changes if provided
@@ -585,11 +572,7 @@ public class AuthController : ControllerBase
                 {
                     var setEmail = await _userManager.SetEmailAsync(user, newEmail);
                     if (!setEmail.Succeeded)
-                    {
-                        // Reload user from database to discard in-memory changes
-                        await _userManager.FindByIdAsync(userId);
                         return BadRequest(setEmail.Errors);
-                    }
 
                     // Mark email as unconfirmed until the new address is verified
                     user.EmailConfirmed = false;
@@ -605,13 +588,15 @@ public class AuthController : ControllerBase
                 }
             }
 
+            // Apply display name change only after phone and email validations pass
+            if (!string.IsNullOrWhiteSpace(request.DisplayName))
+            {
+                user.DisplayName = request.DisplayName.Trim();
+            }
+
             var updateResult = await _userManager.UpdateAsync(user);
             if (!updateResult.Succeeded)
-            {
-                // Reload user from database to discard in-memory changes
-                await _userManager.FindByIdAsync(userId);
                 return BadRequest(updateResult.Errors);
-            }
 
             // Send email confirmation after successful update
             if (!string.IsNullOrEmpty(callbackUrl) && !string.IsNullOrEmpty(newEmail))
