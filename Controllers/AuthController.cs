@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Ticketing.Api.Domain;
@@ -535,11 +536,12 @@ public class AuthController : ControllerBase
     {
         _logger.LogInformation("UpdateUser endpoint accessed from IP: {IpAddress}", GetClientIpAddress());
 
-        if (request is null)
+        if (string.IsNullOrWhiteSpace(request.DisplayName)
+            && string.IsNullOrWhiteSpace(request.PhoneNumber)
+            && string.IsNullOrWhiteSpace(request.Email))
         {
-            _logger.LogWarning("UpdateUser endpoint - no user update request was found");
-
-            return BadRequest();
+            _logger.LogWarning("UpdateUser endpoint - empty user update request");
+            return BadRequest("No fields provided to update.");
         }
         try
         {
@@ -566,6 +568,13 @@ public class AuthController : ControllerBase
             if (!string.IsNullOrWhiteSpace(request.Email))
             {
                 newEmail = request.Email.Trim();
+
+                // Validate email format
+                if (!new EmailAddressAttribute().IsValid(newEmail))
+                {
+                    _logger.LogWarning("UpdateUser endpoint - Invalid email format: {Email}", newEmail);
+                    return BadRequest(new[] { new IdentityError { Code = "InvalidEmail", Description = "The email address format is invalid." } });
+                }
 
                 // Only process if the email actually changed
                 if (!string.Equals(user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
@@ -606,10 +615,10 @@ public class AuthController : ControllerBase
 
             return Ok(new
             {
-                user.Id,
-                user.DisplayName,
-                user.Email,
-                user.PhoneNumber
+                Id = user.Id,
+                DisplayName = user.DisplayName,
+                Email = user.Email,
+                PhoneNumber = user.PhoneNumber
             });
 
         }
