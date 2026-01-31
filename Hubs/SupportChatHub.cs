@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using System.Security.Claims;
 using Ticketing.Api.DTOs;
@@ -18,6 +18,7 @@ public class SupportChatHub : Hub
     public override async Task OnConnectedAsync()
     {
         var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var displayName = Context.User?.FindFirst("display_name")?.Value ?? "Unknown";
         var isAdmin = Context.User?.IsInRole("Admin") ?? false;
 
         if (string.IsNullOrEmpty(userId))
@@ -34,11 +35,11 @@ public class SupportChatHub : Hub
         if (isAdmin)
         {
             await Groups.AddToGroupAsync(Context.ConnectionId, "admins");
-            _logger.LogInformation("Admin {UserId} connected to SupportChatHub", userId);
+            _logger.LogInformation("Admin {DisplayName} (ID: {UserId}) connected to SupportChatHub", displayName, userId);
         }
         else
         {
-            _logger.LogInformation("Customer {UserId} connected to SupportChatHub", userId);
+            _logger.LogInformation("Customer {DisplayName} (ID: {UserId}) connected to SupportChatHub", displayName, userId);
         }
 
         await base.OnConnectedAsync();
@@ -47,21 +48,24 @@ public class SupportChatHub : Hub
     public async Task JoinConversation(string conversationId)
     {
         var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var displayName = Context.User?.FindFirst("display_name")?.Value ?? "Unknown";
         await Groups.AddToGroupAsync(Context.ConnectionId, $"conv:{conversationId}");
-        _logger.LogInformation("User {UserId} joined conversation {ConversationId}", userId, conversationId);
+        _logger.LogInformation("User {DisplayName} (ID: {UserId}) joined conversation {ConversationId}", displayName, userId, conversationId);
     }
 
     public async Task LeaveConversation(string conversationId)
     {
         var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var displayName = Context.User?.FindFirst("display_name")?.Value ?? "Unknown";
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"conv:{conversationId}");
-        _logger.LogInformation("User {UserId} left conversation {ConversationId}", userId, conversationId);
+        _logger.LogInformation("User {DisplayName} (ID: {UserId}) left conversation {ConversationId}", displayName, userId, conversationId);
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        _logger.LogInformation("User {UserId} disconnected from SupportChatHub", userId);
+        var displayName = Context.User?.FindFirst("display_name")?.Value ?? "Unknown";
+        _logger.LogInformation("User {DisplayName} (ID: {UserId}) disconnected from SupportChatHub", displayName, userId);
         await base.OnDisconnectedAsync(exception);
     }
 

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Ticketing.Api.Data;
 using Ticketing.Api.Domain;
 using Ticketing.Api.DTOs;
+using Ticketing.Api.Extensions;
 
 namespace Ticketing.Api.Services;
 
@@ -19,11 +20,13 @@ public class SupportChatService : ISupportChatService
 {
     private readonly AppDbContext _context;
     private readonly ILogger<SupportChatService> _logger;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public SupportChatService(AppDbContext context, ILogger<SupportChatService> logger)
+    public SupportChatService(AppDbContext context, ILogger<SupportChatService> logger, IHttpContextAccessor httpContextAccessor)
     {
         _context = context;
         _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<(Guid ConversationId, int UnreadCount)> OpenConversationAsync(string customerUserId, string customerDisplayName)
@@ -49,8 +52,8 @@ public class SupportChatService : ISupportChatService
                 await _context.SaveChangesAsync();
             }
             
-            _logger.LogInformation("Returning existing conversation {ConversationId} for customer {CustomerId} with {UnreadCount} unread messages", 
-                existing.Id, customerUserId, existing.UnreadForCustomerCount);
+            _logger.LogInformation("Returning existing conversation {ConversationId} for customer {CustomerName} (ID: {CustomerId}) with {UnreadCount} unread messages", 
+                existing.Id, customerDisplayName, customerUserId, existing.UnreadForCustomerCount);
             return (existing.Id, existing.UnreadForCustomerCount);
         }
 
@@ -73,7 +76,7 @@ public class SupportChatService : ISupportChatService
         _context.Conversations.Add(conversation);
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("Created new conversation {ConversationId} for customer {CustomerId}", conversation.Id, customerUserId);
+        _logger.LogInformation("Created new conversation {ConversationId} for customer {CustomerName} (ID: {CustomerId})", conversation.Id, customerDisplayName, customerUserId);
         return (conversation.Id, conversation.UnreadForCustomerCount);
     }
 
@@ -163,6 +166,8 @@ public class SupportChatService : ISupportChatService
 
     public async Task<MessageDto> SendMessageAsync(Guid conversationId, string senderUserId, SenderType senderType, string text)
     {
+        var senderDisplayName = _httpContextAccessor.GetCurrentUserDisplayName();
+        
         var conversation = await _context.Conversations
             .Where(c => c.Id == conversationId)
             .FirstOrDefaultAsync();
@@ -210,7 +215,8 @@ public class SupportChatService : ISupportChatService
 
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("Message {MessageId} sent in conversation {ConversationId} by {SenderType}", message.Id, conversationId, senderType);
+        _logger.LogInformation("Message {MessageId} sent in conversation {ConversationId} by {SenderType} {SenderName} (ID: {SenderId})", 
+            message.Id, conversationId, senderType, senderDisplayName, senderUserId);
 
         return new MessageDto(
             message.Id,

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.SignalR;
 using System.Security.Claims;
 using Ticketing.Api.Domain;
 using Ticketing.Api.DTOs;
+using Ticketing.Api.Extensions;
 using Ticketing.Api.Hubs;
 using Ticketing.Api.Services;
 
@@ -17,15 +18,18 @@ public class ChatController : ControllerBase
     private readonly ISupportChatService _chatService;
     private readonly IHubContext<SupportChatHub> _hubContext;
     private readonly ILogger<ChatController> _logger;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
     public ChatController(
         ISupportChatService chatService,
         IHubContext<SupportChatHub> hubContext,
-        ILogger<ChatController> logger)
+        ILogger<ChatController> logger,
+        IHttpContextAccessor httpContextAccessor)
     {
         _chatService = chatService;
         _hubContext = hubContext;
         _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     [HttpGet("conversations/{id}")]
@@ -51,7 +55,8 @@ public class ChatController : ControllerBase
         }
         catch (UnauthorizedAccessException ex)
         {
-            _logger.LogWarning(ex, "Unauthorized access attempt by user {UserId} to conversation {ConversationId}", userId, id);
+            var displayName = _httpContextAccessor.GetCurrentUserDisplayName();
+            _logger.LogWarning(ex, "Unauthorized access attempt by user {DisplayName} (ID: {UserId}) to conversation {ConversationId}", displayName, userId, id);
             return Forbid();
         }
     }
@@ -74,7 +79,8 @@ public class ChatController : ControllerBase
         }
         catch (UnauthorizedAccessException ex)
         {
-            _logger.LogWarning(ex, "Unauthorized access attempt by user {UserId} to conversation {ConversationId}", userId, id);
+            var displayName = _httpContextAccessor.GetCurrentUserDisplayName();
+            _logger.LogWarning(ex, "Unauthorized access attempt by user {DisplayName} (ID: {UserId}) to conversation {ConversationId}", displayName, userId, id);
             return Forbid();
         }
         catch (InvalidOperationException ex)
@@ -136,7 +142,8 @@ public class ChatController : ControllerBase
         }
         catch (UnauthorizedAccessException ex)
         {
-            _logger.LogWarning(ex, "Unauthorized access attempt by user {UserId} to conversation {ConversationId}", userId, request.ConversationId);
+            var displayName = _httpContextAccessor.GetCurrentUserDisplayName();
+            _logger.LogWarning(ex, "Unauthorized access attempt by user {DisplayName} (ID: {UserId}) to conversation {ConversationId}", displayName, userId, request.ConversationId);
             return Forbid();
         }
         catch (InvalidOperationException ex)
