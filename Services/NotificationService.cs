@@ -8,7 +8,7 @@ namespace Ticketing.Api.Services;
 
 public interface INotificationService
 {
-    Task<NotificationDto> CreateNotificationAsync(string userId, string title, string message);
+    Task<NotificationDto> CreateNotificationAsync(string userId, string title, string message, Guid? ticketId = null);
 }
 
 public class NotificationService : INotificationService
@@ -22,13 +22,14 @@ public class NotificationService : INotificationService
         _hub = hub;
     }
 
-    public async Task<NotificationDto> CreateNotificationAsync(string userId, string title, string message)
+    public async Task<NotificationDto> CreateNotificationAsync(string userId, string title, string message, Guid? ticketId = null)
     {
         var entity = new Notification
         {
             UserId = userId,
             Title = title,
             Message = message,
+            TicketId = ticketId,
             CreatedAtUtc = DateTime.UtcNow
         };
 
