@@ -22,12 +22,21 @@ public class TicketsService : ITicketsService
     private readonly AppDbContext _db;
     private readonly ILogger<TicketsService> _logger;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly INotificationService _notificationService;
+    private readonly UserManager<ApplicationUser> _userManager;
 
-    public TicketsService(AppDbContext db, ILogger<TicketsService> logger, IHttpContextAccessor httpContextAccessor)
+    public TicketsService(
+        AppDbContext db, 
+        ILogger<TicketsService> logger, 
+        IHttpContextAccessor httpContextAccessor,
+        INotificationService notificationService,
+        UserManager<ApplicationUser> userManager)
     {
         _db = db;
         _logger = logger;
         _httpContextAccessor = httpContextAccessor;
+        _notificationService = notificationService;
+        _userManager = userManager;
     }
 
     public async Task<Ticket?> GetTicketByIdAsync(Guid id)
@@ -95,6 +104,25 @@ public class TicketsService : ITicketsService
                 displayName,
                 userId
             );
+
+            // Notify all admins about new ticket
+            var admins = await _userManager.GetUsersInRoleAsync("Admin");
+            foreach (var admin in admins)
+            {
+                await _notificationService.CreateNotificationAsync(
+                    admin.Id,
+                    $"New Ticket Created - {ticket.Title}",
+                    $"{displayName} created a new {ticket.Priority} priority ticket in {ticket.Category}",
+                    ticket.Id
+                );
+            }
+
+            _logger.LogInformation(
+                "Notified {AdminCount} admins about new ticket {TicketId}",
+                admins.Count,
+                ticket.Id
+            );
+
             return ticket;
         }
         catch (Exception ex)
@@ -194,6 +222,9 @@ public class TicketsService : ITicketsService
 
     public async Task UpdateTicketAsync(UpdateTicketRequest request, Ticket ticket)
     {
+        var displayName = _httpContextAccessor.GetCurrentUserDisplayName();
+        var userId = _httpContextAccessor.GetCurrentUserId();
+        
         _logger.LogInformation(
             "Attempting to update ticket with ID: {TicketId}. New Title: {Title}, Category: {Category}",
             ticket.Id,
@@ -213,6 +244,44 @@ public class TicketsService : ITicketsService
             await _db.SaveChangesAsync();
 
             _logger.LogInformation("Successfully updated ticket with ID: {TicketId}", ticket.Id);
+
+            // Notify assigned admin if exists, otherwise notify all admins
+            if (!string.IsNullOrEmpty(ticket.AssignedAdminId) && ticket.AssignedAdminId != userId)
+            {
+                // Notify the assigned admin
+                await _notificationService.CreateNotificationAsync(
+                    ticket.AssignedAdminId,
+                    $"Ticket Updated - {ticket.Title}",
+                    $"{displayName} updated the ticket details",
+                    ticket.Id
+                );
+
+                _logger.LogInformation(
+                    "Notified assigned admin {AdminId} about ticket update {TicketId}",
+                    ticket.AssignedAdminId,
+                    ticket.Id
+                );
+            }
+            else if (string.IsNullOrEmpty(ticket.AssignedAdminId))
+            {
+                // No assigned admin - notify all admins
+                var admins = await _userManager.GetUsersInRoleAsync("Admin");
+                foreach (var admin in admins)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        admin.Id,
+                        $"Unassigned Ticket Updated - {ticket.Title}",
+                        $"{displayName} updated an unassigned ticket",
+                        ticket.Id
+                    );
+                }
+
+                _logger.LogInformation(
+                    "Notified {AdminCount} admins about unassigned ticket update {TicketId}",
+                    admins.Count,
+                    ticket.Id
+                );
+            }
         }
         catch (Exception ex)
         {
@@ -257,6 +326,62 @@ public class TicketsService : ITicketsService
                 displayName,
                 userId
             );
+
+            // Send notification to ticket owner (if commenter is not the owner)
+            if (ticket.CustomerId != userId)
+            {
+                await _notificationService.CreateNotificationAsync(
+                    ticket.CustomerId,
+                    $"New Comment",
+                    $"{displayName} Commented on: {ticket.Title}",
+                    ticket.Id
+                );
+
+                _logger.LogInformation(
+                    "Notification sent to ticket owner {OwnerId} for new comment on ticket {TicketId}",
+                    ticket.CustomerId,
+                    ticket.Id
+                );
+            }
+
+            // If ticket is assigned to an admin and admin is not the commenter, notify the admin
+            // Otherwise, if no admin is assigned, notify all admins
+            if (!string.IsNullOrEmpty(ticket.AssignedAdminId) && ticket.AssignedAdminId != userId)
+            {
+                // Notify the assigned admin
+                await _notificationService.CreateNotificationAsync(
+                    ticket.AssignedAdminId,
+                    $"New comment on assigned ticket - {ticket.Title}",
+                    $"{displayName} commented: {(request.Message.Length > 100 ? request.Message.Substring(0, 100) + "..." : request.Message)}",
+                    ticket.Id
+                );
+
+                _logger.LogInformation(
+                    "Notification sent to assigned admin {AdminId} for new comment on ticket {TicketId}",
+                    ticket.AssignedAdminId,
+                    ticket.Id
+                );
+            }
+            else if (string.IsNullOrEmpty(ticket.AssignedAdminId) && ticket.CustomerId != userId)
+            {
+                // No assigned admin and commenter is not the customer - notify all admins
+                var admins = await _userManager.GetUsersInRoleAsync("Admin");
+                foreach (var admin in admins)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        admin.Id,
+                        $"New comment on unassigned ticket - {ticket.Title}",
+                        $"{displayName} commented: {(request.Message.Length > 100 ? request.Message.Substring(0, 100) + "..." : request.Message)}",
+                        ticket.Id
+                    );
+                }
+
+                _logger.LogInformation(
+                    "Notified {AdminCount} admins about comment on unassigned ticket {TicketId}",
+                    admins.Count,
+                    ticket.Id
+                );
+            }
         }
         catch (Exception ex)
         {

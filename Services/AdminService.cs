@@ -71,13 +71,26 @@ public class AdminService : IAdminService
                 return false;
             }
 
+            var customerId = ticket.CustomerId;
+            var ticketTitle = ticket.Title;
+
             _db.Tickets.Remove(ticket);
             await _db.SaveChangesAsync();
+
+            // Notify customer that their ticket was deleted
+            await _notificationService.CreateNotificationAsync(
+                customerId,
+                $"Ticket Deleted - {ticketTitle}",
+                $"Your ticket has been deleted by {adminName}",
+                null // No ticketId since it's deleted
+            );
+
             _logger.LogInformation(
-                "Admin {AdminName} (ID: {AdminId}) successfully deleted ticket with ID: {TicketId}",
+                "Admin {AdminName} (ID: {AdminId}) successfully deleted ticket with ID: {TicketId}, notification sent to customer {CustomerId}",
                 adminName,
                 adminId,
-                id
+                id,
+                customerId
             );
             return true;
         }
@@ -178,7 +191,7 @@ public class AdminService : IAdminService
                 id,
                 status
             );
-            await _notificationService.CreateNotificationAsync(ticket.CustomerId, $"Status updated for ticket - {ticket.Title}", $"new status is {status}");
+            await _notificationService.CreateNotificationAsync(ticket.CustomerId, $"Status updated for ticket - {ticket.Title}", $"new status is {status}", ticket.Id);
             return ticket;
         }
         catch (Exception ex)
@@ -267,9 +280,38 @@ public class AdminService : IAdminService
         {
             return null!;
         }
+
         ticket.AssignedAdminId = adminId;
         ticket.UpdatedAt = DateTimeOffset.UtcNow;
         await _db.SaveChangesAsync();
+
+        // Notify the newly assigned admin
+        if (!string.IsNullOrEmpty(adminId))
+        {
+            var admin = await _userManager.FindByIdAsync(adminId);
+            await _notificationService.CreateNotificationAsync(
+                adminId,
+                $"Ticket Assigned to You - {ticket.Title}",
+                $"You have been assigned a {ticket.Priority} priority ticket in {ticket.Category}",
+                ticket.Id
+            );
+
+            // Notify customer about assignment
+            await _notificationService.CreateNotificationAsync(
+                ticket.CustomerId,
+                $"Ticket Assigned - {ticket.Title}",
+                $"Your ticket has been assigned to {admin?.DisplayName ?? "an admin"}",
+                ticket.Id
+            );
+
+            _logger.LogInformation(
+                "Ticket {TicketId} assigned to admin {AdminId}, notifications sent to admin and customer {CustomerId}",
+                ticket.Id,
+                adminId,
+                ticket.CustomerId
+            );
+        }
+
         return ticket.AssignedAdminId!;
     }
 
@@ -289,9 +331,25 @@ public class AdminService : IAdminService
         {
             return false;
         }
+
         ticket.AssignedAdminId = null;
         ticket.UpdatedAt = DateTimeOffset.UtcNow;
         await _db.SaveChangesAsync();
+
+        // Notify customer that ticket is now unassigned
+        await _notificationService.CreateNotificationAsync(
+            ticket.CustomerId,
+            $"Ticket Unassigned - {ticket.Title}",
+            "Your ticket is now unassigned and waiting for admin review",
+            ticket.Id
+        );
+
+        _logger.LogInformation(
+            "Ticket {TicketId} unassigned, notification sent to customer {CustomerId}",
+            ticket.Id,
+            ticket.CustomerId
+        );
+
         return true;
     }
 
