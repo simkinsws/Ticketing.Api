@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Ticketing.Api.Data;
 
@@ -11,9 +12,11 @@ using Ticketing.Api.Data;
 namespace Ticketing.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260206045257_AddSubtitleToNotification")]
+    partial class AddSubtitleToNotification
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -417,12 +420,6 @@ namespace Ticketing.Api.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
-                    b.Property<int>("TicketNumber")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("TicketNumber"));
-
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -436,9 +433,6 @@ namespace Ticketing.Api.Migrations
                     b.HasIndex("AssignedAdminId");
 
                     b.HasIndex("CustomerId");
-
-                    b.HasIndex("TicketNumber")
-                        .IsUnique();
 
                     b.ToTable("Tickets");
                 });

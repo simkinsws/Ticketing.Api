@@ -10,6 +10,12 @@ public static class ModelBuilderExtensions
         builder.Entity<Ticket>(b =>
         {
             b.HasIndex(t => t.CustomerId);
+            b.HasIndex(t => t.TicketNumber).IsUnique(); // Make ticket number unique and indexed
+            
+            b.Property(t => t.TicketNumber)
+                .ValueGeneratedOnAdd() // Auto-increment
+                .UseIdentityColumn(seed: 1, increment: 1); // Start at 1
+            
             b.Property(t => t.Title).HasMaxLength(200).IsRequired();
             b.Property(t => t.Category).HasMaxLength(80).IsRequired();
             b.Property(t => t.Description).HasMaxLength(4000).IsRequired();
