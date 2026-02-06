@@ -10,7 +10,8 @@ public class Notification
     public Ticket? Ticket { get; set; }
 
     public string Title { get; set; } = string.Empty;
-    public string Message { get; set; } = string.Empty;
+    public string Subtitle { get; set; } = string.Empty;
+    public string? Message { get; set; }
 
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? ReadAtUtc { get; set; }

@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -66,6 +66,7 @@ public class TicketsController : ControllerBase
 
         var details = new TicketDetails(
             ticket.Id,
+            ticket.TicketNumber,
             ticket.Title,
             ticket.Description,
             ticket.Category,

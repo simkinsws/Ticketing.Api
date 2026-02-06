@@ -3,9 +3,10 @@
 public record NotificationDto(
     Guid Id,
     string Title,
-    string Message,
+    string Subtitle,
+    string? Message,
     DateTime CreatedAtUtc,
     bool IsRead
 );
 
-public record CreateNotificationRequest(string Title, string Message);
+public record CreateNotificationRequest(string Title, string Subtitle, string? Message);

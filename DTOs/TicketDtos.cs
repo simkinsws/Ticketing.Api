@@ -1,4 +1,4 @@
-using Ticketing.Api.Domain;
+﻿using Ticketing.Api.Domain;
 
 namespace Ticketing.Api.DTOs;
 
@@ -19,6 +19,7 @@ public record AddCommentRequest(string Message);
 
 public record TicketListItem(
     Guid Id,
+    int TicketNumber,
     string Title,
     string Category,
     TicketStatus Status,
@@ -37,6 +38,7 @@ public record TicketCommentDto(
 
 public record TicketDetails(
     Guid Id,
+    int TicketNumber,
     string Title,
     string Description,
     string Category,

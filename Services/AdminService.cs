@@ -80,8 +80,9 @@ public class AdminService : IAdminService
             // Notify customer that their ticket was deleted
             await _notificationService.CreateNotificationAsync(
                 customerId,
-                $"Ticket Deleted - {ticketTitle}",
-                $"Your ticket has been deleted by {adminName}",
+                "Ticket Deleted",
+                $"Ticket #TK-{ticket.TicketNumber} was deleted by {adminName}",
+                null,
                 null // No ticketId since it's deleted
             );
 
@@ -191,7 +192,14 @@ public class AdminService : IAdminService
                 id,
                 status
             );
-            await _notificationService.CreateNotificationAsync(ticket.CustomerId, $"Status updated for ticket - {ticket.Title}", $"new status is {status}", ticket.Id);
+            var statusName = status.ToString();
+            await _notificationService.CreateNotificationAsync(
+                ticket.CustomerId, 
+                $"Ticket {statusName}",
+                $"Ticket {ticket.GetFormattedTicketNumber()} marked as {statusName}",
+                null,
+                ticket.Id
+            );
             return ticket;
         }
         catch (Exception ex)
@@ -247,6 +255,7 @@ public class AdminService : IAdminService
                 .Take(request.PageSize)
                 .Select(t => new TicketListItem(
                     t.Id,
+                    t.TicketNumber,
                     t.Title,
                     t.Category,
                     t.Status,
@@ -291,16 +300,18 @@ public class AdminService : IAdminService
             var admin = await _userManager.FindByIdAsync(adminId);
             await _notificationService.CreateNotificationAsync(
                 adminId,
-                $"Ticket Assigned to You - {ticket.Title}",
-                $"You have been assigned a {ticket.Priority} priority ticket in {ticket.Category}",
+                "Ticket Assigned",
+                $"Ticket {ticket.GetFormattedTicketNumber()} assigned to you",
+                $"{ticket.Title}",
                 ticket.Id
             );
 
             // Notify customer about assignment
             await _notificationService.CreateNotificationAsync(
                 ticket.CustomerId,
-                $"Ticket Assigned - {ticket.Title}",
-                $"Your ticket has been assigned to {admin?.DisplayName ?? "an admin"}",
+                "Ticket Assigned",
+                $"Ticket {ticket.GetFormattedTicketNumber()} assigned to {admin?.DisplayName ?? "an admin"}",
+                null,
                 ticket.Id
             );
 
@@ -339,8 +350,9 @@ public class AdminService : IAdminService
         // Notify customer that ticket is now unassigned
         await _notificationService.CreateNotificationAsync(
             ticket.CustomerId,
-            $"Ticket Unassigned - {ticket.Title}",
-            "Your ticket is now unassigned and waiting for admin review",
+            "Ticket Unassigned",
+            $"Ticket {ticket.GetFormattedTicketNumber()} is now unassigned",
+            "Waiting for admin to pick up",
             ticket.Id
         );
 
@@ -370,6 +382,7 @@ public class AdminService : IAdminService
                 .OrderByDescending(t => t.UpdatedAt)
                 .Select(t => new TicketDetails(
                     t.Id,
+                    t.TicketNumber,
                     t.Title,
                     t.Description,
                     t.Category,

@@ -40,6 +40,7 @@ public class NotificationsController : ControllerBase
             .Select(n => new NotificationDto(
                 n.Id,
                 n.Title,
+                n.Subtitle,
                 n.Message,
                 n.CreatedAtUtc.UtcDateTime,
                 n.ReadAtUtc != null

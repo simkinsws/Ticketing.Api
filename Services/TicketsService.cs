@@ -111,8 +111,9 @@ public class TicketsService : ITicketsService
             {
                 await _notificationService.CreateNotificationAsync(
                     admin.Id,
-                    $"New Ticket Created - {ticket.Title}",
-                    $"{displayName} created a new {ticket.Priority} priority ticket in {ticket.Category}",
+                    "New Ticket",
+                    $"{displayName} created ticket {ticket.GetFormattedTicketNumber()}",
+                    $"{ticket.Title}",
                     ticket.Id
                 );
             }
@@ -151,6 +152,7 @@ public class TicketsService : ITicketsService
                 .OrderByDescending(t => t.UpdatedAt)
                 .Select(t => new TicketListItem(
                     t.Id,
+                    t.TicketNumber,
                     t.Title,
                     t.Category,
                     t.Status,
@@ -251,8 +253,9 @@ public class TicketsService : ITicketsService
                 // Notify the assigned admin
                 await _notificationService.CreateNotificationAsync(
                     ticket.AssignedAdminId,
-                    $"Ticket Updated - {ticket.Title}",
-                    $"{displayName} updated the ticket details",
+                    "Ticket Updated",
+                    $"{displayName} updated ticket {ticket.GetFormattedTicketNumber()}",
+                    null,
                     ticket.Id
                 );
 
@@ -270,8 +273,9 @@ public class TicketsService : ITicketsService
                 {
                     await _notificationService.CreateNotificationAsync(
                         admin.Id,
-                        $"Unassigned Ticket Updated - {ticket.Title}",
-                        $"{displayName} updated an unassigned ticket",
+                        "Ticket Updated",
+                        $"{displayName} updated ticket {ticket.GetFormattedTicketNumber()}",
+                        null,
                         ticket.Id
                     );
                 }
@@ -330,10 +334,15 @@ public class TicketsService : ITicketsService
             // Send notification to ticket owner (if commenter is not the owner)
             if (ticket.CustomerId != userId)
             {
+                var commentPreview = request.Message.Length > 50 
+                    ? $"\"{request.Message.Substring(0, 50)}...\"" 
+                    : $"\"{request.Message}\"";
+                    
                 await _notificationService.CreateNotificationAsync(
                     ticket.CustomerId,
-                    $"New Comment",
-                    $"{displayName} Commented on: {ticket.Title}",
+                    "New Comment",
+                    $"{displayName} commented on {ticket.GetFormattedTicketNumber()}",
+                    commentPreview,
                     ticket.Id
                 );
 
@@ -349,10 +358,15 @@ public class TicketsService : ITicketsService
             if (!string.IsNullOrEmpty(ticket.AssignedAdminId) && ticket.AssignedAdminId != userId)
             {
                 // Notify the assigned admin
+                var commentPreview = request.Message.Length > 50 
+                    ? $"\"{request.Message.Substring(0, 50)}...\"" 
+                    : $"\"{request.Message}\"";
+                    
                 await _notificationService.CreateNotificationAsync(
                     ticket.AssignedAdminId,
-                    $"New comment on assigned ticket - {ticket.Title}",
-                    $"{displayName} commented: {(request.Message.Length > 100 ? request.Message.Substring(0, 100) + "..." : request.Message)}",
+                    "New Comment",
+                    $"{displayName} commented on {ticket.GetFormattedTicketNumber()}",
+                    commentPreview,
                     ticket.Id
                 );
 
@@ -366,12 +380,17 @@ public class TicketsService : ITicketsService
             {
                 // No assigned admin and commenter is not the customer - notify all admins
                 var admins = await _userManager.GetUsersInRoleAsync("Admin");
+                var commentPreview = request.Message.Length > 50 
+                    ? $"\"{request.Message.Substring(0, 50)}...\"" 
+                    : $"\"{request.Message}\"";
+                    
                 foreach (var admin in admins)
                 {
                     await _notificationService.CreateNotificationAsync(
                         admin.Id,
-                        $"New comment on unassigned ticket - {ticket.Title}",
-                        $"{displayName} commented: {(request.Message.Length > 100 ? request.Message.Substring(0, 100) + "..." : request.Message)}",
+                        "New Comment",
+                        $"{displayName} commented on {ticket.GetFormattedTicketNumber()}",
+                        commentPreview,
                         ticket.Id
                     );
                 }
