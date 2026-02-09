@@ -1,4 +1,4 @@
-using Azure.Storage.Blobs;
+﻿using Azure.Storage.Blobs;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
@@ -99,27 +99,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         {
             OnMessageReceived = context =>
             {
+                // Check Authorization header first (standard Bearer token)
                 var authHeader = context.Request.Headers["Authorization"].ToString();
                 if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                 {
                     return Task.CompletedTask;
                 }
 
+                // Allow SignalR to authenticate via query string (for WebSocket connections)
                 var path = context.HttpContext.Request.Path;
-                if (path.StartsWithSegments("/hubs/notifications", StringComparison.InvariantCultureIgnoreCase) || path.StartsWithSegments("/hubs/support", StringComparison.InvariantCultureIgnoreCase))
+                if (path.StartsWithSegments("/hubs/notifications", StringComparison.InvariantCultureIgnoreCase) || 
+                    path.StartsWithSegments("/hubs/support", StringComparison.InvariantCultureIgnoreCase))
                 {
                     var accessToken = context.Request.Query["access_token"];
                     if (!string.IsNullOrEmpty(accessToken))
                     {
                         context.Token = accessToken;
-                        return Task.CompletedTask;
                     }
-                }
-
-                var cookieToken = context.Request.Cookies["access_token"];
-                if (!string.IsNullOrEmpty(cookieToken))
-                {
-                    context.Token = cookieToken;
                 }
 
                 return Task.CompletedTask;

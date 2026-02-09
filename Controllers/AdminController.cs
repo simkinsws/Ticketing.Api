@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -16,9 +16,20 @@ namespace Ticketing.Api.Controllers;
 public class AdminController : ControllerBase
 {
     private readonly IAdminService _adminService;
-    public AdminController(IAdminService adminService)
+    private readonly ITicketsService _ticketsService;
+    
+    public AdminController(IAdminService adminService, ITicketsService ticketsService)
     {
         _adminService = adminService;
+        _ticketsService = ticketsService;
+    }
+
+    [HttpGet("tickets/statistics")]
+    public async Task<ActionResult<TicketsStatistics>> AllTicketsStatistics()
+    {
+        // Pass null to get statistics for ALL tickets
+        var statistics = await _ticketsService.GetTicketsStatisticsAsync(null);
+        return statistics;
     }
 
     [HttpGet("tickets")]

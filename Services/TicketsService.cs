@@ -15,6 +15,7 @@ public interface ITicketsService
     public Task<Ticket?> GetTicketByIdAsync(Guid id);
     public Task UpdateTicketAsync(UpdateTicketRequest request, Ticket ticket);
     public Task AddCommentAsync(AddCommentRequest request, Ticket ticket, string userId);
+    public Task<TicketsStatistics> GetTicketsStatisticsAsync(string? userId = null);
 }
 
 public class TicketsService : ITicketsService
@@ -180,6 +181,88 @@ public class TicketsService : ITicketsService
                 ex.Message
             );
             return new List<TicketListItem>();
+        }
+    }
+
+    public async Task<TicketsStatistics> GetTicketsStatisticsAsync(string? userId = null)
+    {
+        var displayName = _httpContextAccessor.GetCurrentUserDisplayName();
+
+        if (userId != null)
+        {
+            _logger.LogInformation("Attempting to retrieve tickets statistics for user {DisplayName} (ID: {UserId})", displayName, userId);
+        }
+        else
+        {
+            _logger.LogInformation("Attempting to retrieve tickets statistics for all users (requested by admin {DisplayName})", displayName);
+        }
+
+        try
+        {
+            var ticketsQuery = userId != null 
+                ? _db.Tickets.Where(t => t.CustomerId == userId)
+                : _db.Tickets;
+            
+            var statusCounts = await ticketsQuery
+                .GroupBy(t => t.Status)
+                .Select(g => new 
+                { 
+                    Status = g.Key, 
+                    Count = g.Count() 
+                })
+                .ToListAsync();
+
+            var totalTickets = statusCounts.Sum(x => x.Count);
+
+            var openTickets = statusCounts.FirstOrDefault(x => x.Status == TicketStatus.Open)?.Count ?? 0;
+            var inProgressTickets = statusCounts.FirstOrDefault(x => x.Status == TicketStatus.InProgress)?.Count ?? 0;
+            var resolvedTickets = statusCounts.FirstOrDefault(x => x.Status == TicketStatus.Resolved)?.Count ?? 0;
+            var closedTickets = statusCounts.FirstOrDefault(x => x.Status == TicketStatus.Closed)?.Count ?? 0;
+
+            var statistics = new TicketsStatistics(
+                totalTickets,
+                resolvedTickets,
+                inProgressTickets,
+                openTickets,
+                closedTickets
+            );
+
+            if (userId != null)
+            {
+                _logger.LogInformation(
+                    "Successfully retrieved statistics for user {DisplayName} (ID: {UserId}): Total={Total}, Open={Open}, InProgress={InProgress}, Resolved={Resolved}, Closed={Closed}",
+                    displayName,
+                    userId,
+                    totalTickets,
+                    openTickets,
+                    inProgressTickets,
+                    resolvedTickets,
+                    closedTickets
+                );
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Successfully retrieved statistics for all users: Total={Total}, Open={Open}, InProgress={InProgress}, Resolved={Resolved}, Closed={Closed}",
+                    totalTickets,
+                    openTickets,
+                    inProgressTickets,
+                    resolvedTickets,
+                    closedTickets
+                );
+            }
+
+            return statistics;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Failed to retrieve tickets statistics for {Scope}. Error: {ErrorMessage}",
+                userId != null ? $"user {userId}" : "all users",
+                ex.Message
+            );
+            throw;
         }
     }
 

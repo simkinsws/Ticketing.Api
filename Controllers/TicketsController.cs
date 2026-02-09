@@ -48,6 +48,18 @@ public class TicketsController : ControllerBase
         return items;
     }
 
+    [HttpGet("my/statistics")]
+    public async Task<ActionResult<TicketsStatistics>> MyStatistics()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+            return Unauthorized();
+
+        var statistics = await _ticketsService.GetTicketsStatisticsAsync(user.Id);
+
+        return statistics;
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<TicketDetails>> GetById(Guid id)
     {
