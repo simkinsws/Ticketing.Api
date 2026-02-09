@@ -1,9 +1,9 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Mvc;
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Ticketing.Api.Domain;
 using Ticketing.Api.DTOs;
 using Ticketing.Api.Services;
@@ -20,9 +20,6 @@ public class AuthController : ControllerBase
     private readonly IEmailService _emailService;
     private readonly IConfiguration _config;
     private readonly ILogger<AuthController> _logger;
-
-    private const string RefreshCookieName = "refresh_token";
-    private const string AccessTokenCookieName = "access_token";
 
     public AuthController(
         UserManager<ApplicationUser> userManager,
@@ -313,7 +310,12 @@ public class AuthController : ControllerBase
                     req.Email,
                     ipAddress
                 );
-                return BadRequest(new { message = "No account found with this email address. Please check your email or register for a new account." });
+                return BadRequest(
+                    new
+                    {
+                        message = "No account found with this email address. Please check your email or register for a new account.",
+                    }
+                );
             }
 
             //TODO: Think if Email confirmation should be required (or can be deleted at all from register/login flow)
@@ -367,7 +369,12 @@ public class AuthController : ControllerBase
                     failedAttempts,
                     ipAddress
                 );
-                return Unauthorized(new { message = "Incorrect password. Please try again or use 'Forgot Password' to reset it." });
+                return Unauthorized(
+                    new
+                    {
+                        message = "Incorrect password. Please try again or use 'Forgot Password' to reset it.",
+                    }
+                );
             }
 
             _logger.LogInformation(
@@ -398,14 +405,13 @@ public class AuthController : ControllerBase
 
         try
         {
-            var refreshToken = Request.Cookies[RefreshCookieName];
-            if (string.IsNullOrWhiteSpace(refreshToken))
+            if (string.IsNullOrWhiteSpace(req.RefreshToken))
             {
                 _logger.LogWarning(
-                    "Token refresh failed - No refresh token found in cookies from IP: {IpAddress}",
+                    "Token refresh failed - No refresh token provided from IP: {IpAddress}",
                     GetClientIpAddress()
                 );
-                return Unauthorized();
+                return Unauthorized(new { message = "Refresh token is required" });
             }
 
             var handler = new JwtSecurityTokenHandler();
@@ -421,7 +427,7 @@ public class AuthController : ControllerBase
                     "Token refresh failed - Invalid access token from IP: {IpAddress}",
                     GetClientIpAddress()
                 );
-                return Unauthorized();
+                return Unauthorized(new { message = "Invalid access token" });
             }
 
             var userId = jwt.Subject;
@@ -431,10 +437,10 @@ public class AuthController : ControllerBase
                     "Token refresh failed - No user ID in token from IP: {IpAddress}",
                     GetClientIpAddress()
                 );
-                return Unauthorized();
+                return Unauthorized(new { message = "Invalid token claims" });
             }
 
-            var refreshHash = _tokenService.HashRefreshToken(refreshToken);
+            var refreshHash = _tokenService.HashRefreshToken(req.RefreshToken);
             var stored = await _tokenService.GetActiveRefreshTokenAsync(userId, refreshHash);
             if (stored is null)
             {
@@ -443,7 +449,7 @@ public class AuthController : ControllerBase
                     userId,
                     GetClientIpAddress()
                 );
-                return Unauthorized();
+                return Unauthorized(new { message = "Invalid or expired refresh token" });
             }
 
             await _tokenService.RevokeRefreshTokenAsync(stored);
@@ -456,7 +462,7 @@ public class AuthController : ControllerBase
                     userId,
                     GetClientIpAddress()
                 );
-                return Unauthorized();
+                return Unauthorized(new { message = "User not found" });
             }
 
             _logger.LogInformation(
@@ -476,23 +482,6 @@ public class AuthController : ControllerBase
             );
             return StatusCode(500, "An unexpected error occurred");
         }
-    }
-
-    [Authorize]
-    [HttpPost("logout")]
-    public async Task<IActionResult> Logout()
-    {
-        var user = await _userManager.GetUserAsync(User);
-        _logger.LogInformation(
-            "Logout successful. UserId: {UserId}, Email: {Email} from IP: {IpAddress}",
-            user?.Id,
-            user?.Email,
-            GetClientIpAddress()
-        );
-
-        Response.Cookies.Delete(RefreshCookieName);
-        Response.Cookies.Delete(AccessTokenCookieName);
-        return Ok("Logged out successfully");
     }
 
     [Authorize]
@@ -518,7 +507,13 @@ public class AuthController : ControllerBase
                 string.Join(", ", roles),
                 User.FindFirst(ClaimTypes.NameIdentifier)?.Value
             );
-            return new UserProfile(user.Id, user.Email ?? "", user.DisplayName ?? "", roles, User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            return new UserProfile(
+                user.Id,
+                user.Email ?? "",
+                user.DisplayName ?? "",
+                roles,
+                User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            );
         }
         catch (Exception ex)
         {
@@ -530,15 +525,21 @@ public class AuthController : ControllerBase
             return StatusCode(500, "An unexpected error occurred");
         }
     }
+
     [Authorize]
     [HttpPatch("me")]
     public async Task<ActionResult<UserProfile>> UpdateUser([FromBody] UpdateUserRequest request)
     {
-        _logger.LogInformation("UpdateUser endpoint accessed from IP: {IpAddress}", GetClientIpAddress());
+        _logger.LogInformation(
+            "UpdateUser endpoint accessed from IP: {IpAddress}",
+            GetClientIpAddress()
+        );
 
-        if (string.IsNullOrWhiteSpace(request.DisplayName)
+        if (
+            string.IsNullOrWhiteSpace(request.DisplayName)
             && string.IsNullOrWhiteSpace(request.PhoneNumber)
-            && string.IsNullOrWhiteSpace(request.Email))
+            && string.IsNullOrWhiteSpace(request.Email)
+        )
         {
             _logger.LogWarning("UpdateUser endpoint - empty user update request");
             return BadRequest("No fields provided to update.");
@@ -547,7 +548,8 @@ public class AuthController : ControllerBase
         {
             var user = await _userManager.GetUserAsync(User);
 
-            if (user is null) {
+            if (user is null)
+            {
                 _logger.LogWarning("UpdateUser endpoint - User not found");
                 return Unauthorized();
             }
@@ -572,8 +574,20 @@ public class AuthController : ControllerBase
                 // Validate email format
                 if (!new EmailAddressAttribute().IsValid(newEmail))
                 {
-                    _logger.LogWarning("UpdateUser endpoint - Invalid email format: {Email}", newEmail);
-                    return BadRequest(new[] { new IdentityError { Code = "InvalidEmail", Description = "The email address format is invalid." } });
+                    _logger.LogWarning(
+                        "UpdateUser endpoint - Invalid email format: {Email}",
+                        newEmail
+                    );
+                    return BadRequest(
+                        new[]
+                        {
+                            new IdentityError
+                            {
+                                Code = "InvalidEmail",
+                                Description = "The email address format is invalid.",
+                            },
+                        }
+                    );
                 }
 
                 var setEmail = await _userManager.SetEmailAsync(user, newEmail);
@@ -609,14 +623,15 @@ public class AuthController : ControllerBase
                 await _emailService.SendConfirmationEmailAsync(newEmail, callbackUrl);
             }
 
-            return Ok(new
-            {
-                Id = user.Id,
-                DisplayName = user.DisplayName,
-                Email = user.Email,
-                PhoneNumber = user.PhoneNumber
-            });
-
+            return Ok(
+                new
+                {
+                    Id = user.Id,
+                    DisplayName = user.DisplayName,
+                    Email = user.Email,
+                    PhoneNumber = user.PhoneNumber,
+                }
+            );
         }
         catch (Exception ex)
         {
@@ -624,6 +639,7 @@ public class AuthController : ControllerBase
             return StatusCode(500, "An unexpected error occurred.");
         }
     }
+
     private async Task<AuthResponse> IssueTokensAsync(ApplicationUser user, bool rememberMe = false)
     {
         try
@@ -639,67 +655,12 @@ public class AuthController : ControllerBase
             var (refreshToken, refreshHash, _) = _tokenService.CreateRefreshToken();
             await _tokenService.StoreRefreshTokenAsync(user.Id, refreshHash, refreshExpires);
 
-            // --- Cookie policy (IMPORTANT for iOS + cross-site) ---
-            // Production: MUST be SameSite=None + Secure=true for cross-origin XHR with credentials
-            var env = HttpContext.RequestServices.GetRequiredService<IHostEnvironment>();
-            var isDevelopment = env.IsDevelopment();
-
-            // Trust forwarded proto if you enabled forwarded headers middleware.
-            // Otherwise Request.IsHttps might be false behind a proxy.
-            var isHttps =
-                Request.IsHttps ||
-                string.Equals(Request.Headers["X-Forwarded-Proto"].ToString(), "https", StringComparison.OrdinalIgnoreCase);
-
-            SameSiteMode sameSite;
-            bool secure;
-
-            if (!isDevelopment)
-            {
-                // ✅ Production (cross-site): required
-                sameSite = SameSiteMode.None;
-                secure = true;
-            }
-            else
-            {
-                // ✅ Development: keep your existing behavior, but allow HTTPS dev to work cross-site too
-                if (isHttps)
-                {
-                    sameSite = SameSiteMode.None;
-                    secure = true;
-                }
-                else
-                {
-                    sameSite = SameSiteMode.Lax;
-                    secure = false;
-                }
-            }
-
-            var refreshCookieOptions = new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = secure,
-                SameSite = sameSite,
-                Expires = refreshExpires.UtcDateTime,
-                Path = "/", // recommended
-            };
-
-            var accessCookieOptions = new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = secure,
-                SameSite = sameSite,
-                Expires = expiresAt.UtcDateTime,
-                Path = "/", // recommended
-            };
-
-            Response.Cookies.Append(RefreshCookieName, refreshToken, refreshCookieOptions);
-            Response.Cookies.Append(AccessTokenCookieName, accessToken, accessCookieOptions);
-
             var roles = (await _userManager.GetRolesAsync(user)).ToArray();
             var profile = new UserProfile(user.Id, user.Email ?? "", user.DisplayName ?? "", roles);
 
             var expiresIn = (int)Math.Max(0, (expiresAt - DateTimeOffset.UtcNow).TotalSeconds);
-            return new AuthResponse(accessToken, expiresIn, profile);
+
+            return new AuthResponse(accessToken, expiresIn, profile, refreshToken);
         }
         catch (Exception ex)
         {
@@ -712,7 +673,6 @@ public class AuthController : ControllerBase
             throw;
         }
     }
-
 
     private string GetClientIpAddress()
     {

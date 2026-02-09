@@ -2,6 +2,14 @@
 
 namespace Ticketing.Api.DTOs;
 
+public record TicketsStatistics(
+    int TotalTickets,
+    int ResolvedTickets,
+    int InProgressTickets,
+    int OpenTickets,
+    int ClosedTickets
+);
+
 public record CreateTicketRequest(
     string Title,
     string Description,
