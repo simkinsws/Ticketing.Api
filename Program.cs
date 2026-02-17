@@ -99,12 +99,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         {
             OnMessageReceived = context =>
             {
+                // Check Authorization header first (standard Bearer token)
                 var authHeader = context.Request.Headers["Authorization"].ToString();
                 if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                 {
                     return Task.CompletedTask;
                 }
 
+                // Allow SignalR to authenticate via query string (for WebSocket connections)
                 var path = context.HttpContext.Request.Path;
                 if (path.StartsWithSegments("/hubs/notifications", StringComparison.InvariantCultureIgnoreCase) || 
                     path.StartsWithSegments("/hubs/support", StringComparison.InvariantCultureIgnoreCase))
