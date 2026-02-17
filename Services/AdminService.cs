@@ -150,7 +150,7 @@ public class AdminService : IAdminService
         {
             var users = await _userManager
                 .Users.OrderBy(u => u.Email)
-                .Select(u => new UserListItem(u.Id, u.Email!, u.UserName!, u.DisplayName))
+                .Select(u => new UserListItem(u.Id, u.Email!, u.UserName!, u.DisplayName, u.Country, u.City, u.Street, u.CreatedAt))
                 .ToListAsync();
 
             _logger.LogInformation("Successfully retrieved {UserCount} users", users.Count);
@@ -330,7 +330,7 @@ public class AdminService : IAdminService
     {
         var admins = await _userManager.GetUsersInRoleAsync("Admin");
         var mappedAdmins = admins
-            .Select(x => new UserListItem(x.Id, x.Email!, x.UserName!, x.DisplayName))
+            .Select(x => new UserListItem(x.Id, x.Email!, x.UserName!, x.DisplayName, x.Country, x.City, x.Street, x.CreatedAt))
             .ToList();
         return mappedAdmins;
     }
