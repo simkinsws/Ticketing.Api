@@ -144,8 +144,12 @@ public class NotificationsController : ControllerBase
             return Unauthorized();
         }
 
-        var notification = await _db.Notifications
-            .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId);
+        var isAdmin = User.IsInRole("Admin");
+
+        // Admins can delete any notification, users can only delete their own
+        var notification = isAdmin 
+            ? await _db.Notifications.FirstOrDefaultAsync(n => n.Id == id)
+            : await _db.Notifications.FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId);
 
         if (notification == null)
         {

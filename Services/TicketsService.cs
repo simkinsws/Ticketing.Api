@@ -106,10 +106,14 @@ public class TicketsService : ITicketsService
                 userId
             );
 
-            // Notify all admins about new ticket
+            // Notify all admins about new ticket (excluding ticket creator if they're an admin)
             var admins = await _userManager.GetUsersInRoleAsync("Admin");
             foreach (var admin in admins)
             {
+                // Skip notifying if the ticket creator is an admin (edge case)
+                if (admin.Id == userId)
+                    continue;
+
                 await _notificationService.CreateNotificationAsync(
                     admin.Id,
                     "New Ticket",
@@ -121,7 +125,7 @@ public class TicketsService : ITicketsService
 
             _logger.LogInformation(
                 "Notified {AdminCount} admins about new ticket {TicketId}",
-                admins.Count,
+                admins.Count(a => a.Id != userId),
                 ticket.Id
             );
 
@@ -350,10 +354,14 @@ public class TicketsService : ITicketsService
             }
             else if (string.IsNullOrEmpty(ticket.AssignedAdminId))
             {
-                // No assigned admin - notify all admins
+                // No assigned admin - notify all admins EXCEPT the one who updated
                 var admins = await _userManager.GetUsersInRoleAsync("Admin");
                 foreach (var admin in admins)
                 {
+                    // Skip notifying the admin who made the update
+                    if (admin.Id == userId)
+                        continue;
+
                     await _notificationService.CreateNotificationAsync(
                         admin.Id,
                         "Ticket Updated",
@@ -364,8 +372,8 @@ public class TicketsService : ITicketsService
                 }
 
                 _logger.LogInformation(
-                    "Notified {AdminCount} admins about unassigned ticket update {TicketId}",
-                    admins.Count,
+                    "Notified {AdminCount} admins (excluding updater) about unassigned ticket update {TicketId}",
+                    admins.Count(a => a.Id != userId),
                     ticket.Id
                 );
             }
@@ -461,7 +469,7 @@ public class TicketsService : ITicketsService
             }
             else if (string.IsNullOrEmpty(ticket.AssignedAdminId) && ticket.CustomerId != userId)
             {
-                // No assigned admin and commenter is not the customer - notify all admins
+                // No assigned admin and commenter is not the customer - notify all admins EXCEPT the commenter
                 var admins = await _userManager.GetUsersInRoleAsync("Admin");
                 var commentPreview = request.Message.Length > 50 
                     ? $"\"{request.Message.Substring(0, 50)}...\"" 
@@ -469,6 +477,10 @@ public class TicketsService : ITicketsService
                     
                 foreach (var admin in admins)
                 {
+                    // Skip notifying the admin who made the comment
+                    if (admin.Id == userId)
+                        continue;
+
                     await _notificationService.CreateNotificationAsync(
                         admin.Id,
                         "New Comment",
@@ -479,8 +491,8 @@ public class TicketsService : ITicketsService
                 }
 
                 _logger.LogInformation(
-                    "Notified {AdminCount} admins about comment on unassigned ticket {TicketId}",
-                    admins.Count,
+                    "Notified {AdminCount} admins (excluding commenter) about comment on unassigned ticket {TicketId}",
+                    admins.Count(a => a.Id != userId),
                     ticket.Id
                 );
             }
