@@ -66,6 +66,8 @@ public class AuthController : ControllerBase
                 EmailConfirmed = false,
                 Country = country,
                 City = city,
+                PhoneNumber = req.PhoneNumber?.Trim(),
+                PhoneNumberConfirmed = !string.IsNullOrWhiteSpace(req.PhoneNumber),
             };
 
             var create = await _userManager.CreateAsync(user, req.Password);
@@ -543,7 +545,10 @@ public class AuthController : ControllerBase
                 user.Country,
                 user.City,
                 user.Street,
-                user.CreatedAt
+                user.CreatedAt,
+                user.EmailConfirmed,
+                user.PhoneNumber,
+                user.PhoneNumberConfirmed
             );
         }
         catch (Exception ex)
@@ -592,9 +597,14 @@ public class AuthController : ControllerBase
             if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
             {
                 var phoneNumber = request.PhoneNumber.Trim();
-                var setPhone = await _userManager.SetPhoneNumberAsync(user, phoneNumber);
-                if (!setPhone.Succeeded)
-                    return BadRequest(setPhone.Errors);
+                
+                user.PhoneNumber = phoneNumber;
+                user.PhoneNumberConfirmed = true;
+                
+                _logger.LogInformation(
+                    "Phone number updated and verified for user {UserId}",
+                    user.Id
+                );
             }
 
             // Apply and validate email changes if provided
@@ -681,7 +691,10 @@ public class AuthController : ControllerBase
                     user.Country,
                     user.City,
                     user.Street,
-                    user.CreatedAt
+                    user.CreatedAt,
+                    user.EmailConfirmed,
+                    user.PhoneNumber,
+                    user.PhoneNumberConfirmed
                 )
             );
         }
@@ -717,7 +730,10 @@ public class AuthController : ControllerBase
                 user.Country,
                 user.City,
                 user.Street,
-                user.CreatedAt
+                user.CreatedAt,
+                user.EmailConfirmed,
+                user.PhoneNumber,
+                user.PhoneNumberConfirmed
             );
 
             var expiresIn = (int)Math.Max(0, (expiresAt - DateTimeOffset.UtcNow).TotalSeconds);
