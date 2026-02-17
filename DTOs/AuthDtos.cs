@@ -1,6 +1,6 @@
 ﻿namespace Ticketing.Api.DTOs;
 
-public record RegisterRequest(string Email, string Password, string? DisplayName);
+public record RegisterRequest(string Email, string Password, string? DisplayName, string? PhoneNumber);
 public record LoginRequest(string Email, string Password, bool RememberMe = false);
 public record RefreshRequest(string AccessToken, string RefreshToken);
 public record ConfirmEmailRequest(string UserId, string Token);
@@ -23,7 +23,10 @@ public record UserProfile(
     string? Country = null,
     string? City = null,
     string? Street = null,
-    DateTimeOffset? CreatedAt = null
+    DateTimeOffset? CreatedAt = null,
+    bool EmailConfirmed = false,
+    string? PhoneNumber = null,
+    bool PhoneNumberConfirmed = false
 );
 
 public record UserListItem(
