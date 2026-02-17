@@ -20,6 +20,7 @@ public class AuthController : ControllerBase
     private readonly IEmailService _emailService;
     private readonly IConfiguration _config;
     private readonly ILogger<AuthController> _logger;
+    private readonly IGeolocationService _geolocationService;
 
     public AuthController(
         UserManager<ApplicationUser> userManager,
@@ -27,7 +28,8 @@ public class AuthController : ControllerBase
         TokenService tokenService,
         IEmailService emailService,
         IConfiguration config,
-        ILogger<AuthController> logger
+        ILogger<AuthController> logger,
+        IGeolocationService geolocationService
     )
     {
         _userManager = userManager;
@@ -36,6 +38,7 @@ public class AuthController : ControllerBase
         _emailService = emailService;
         _config = config;
         _logger = logger;
+        _geolocationService = geolocationService;
     }
 
     [HttpPost("register")]
@@ -49,6 +52,10 @@ public class AuthController : ControllerBase
 
         try
         {
+            // Auto-detect location from IP (Country + City only)
+            var ipAddress = GetClientIpAddress();
+            var (country, city) = await _geolocationService.GetLocationFromIpAsync(ipAddress);
+
             var user = new ApplicationUser
             {
                 Email = req.Email,
@@ -57,6 +64,8 @@ public class AuthController : ControllerBase
                     ? req.Email.Split('@')[0]
                     : req.DisplayName,
                 EmailConfirmed = false,
+                Country = country,
+                City = city,
             };
 
             var create = await _userManager.CreateAsync(user, req.Password);
@@ -86,7 +95,6 @@ public class AuthController : ControllerBase
 
             try
             {
-                //TODO: Think if Email confirmation should be required (or can be deleted at all from register/login flow)
                 await _emailService.SendConfirmationEmailAsync(user.Email!, confirmationLink);
                 _logger.LogInformation("Confirmation email sent to: {Email}", user.Email);
             }
@@ -383,6 +391,25 @@ public class AuthController : ControllerBase
                 user.Id,
                 ipAddress
             );
+
+            // Auto-detect and update location if not set
+            if (string.IsNullOrEmpty(user.Country) || string.IsNullOrEmpty(user.City))
+            {
+                var (country, city) = await _geolocationService.GetLocationFromIpAsync(ipAddress);
+                if (!string.IsNullOrEmpty(country))
+                {
+                    user.Country = country;
+                    user.City = city;
+                    await _userManager.UpdateAsync(user);
+                    _logger.LogInformation(
+                        "Location auto-detected and updated for user {UserId}: {City}, {Country}",
+                        user.Id,
+                        city,
+                        country
+                    );
+                }
+            }
+
             return await IssueTokensAsync(user, req.RememberMe);
         }
         catch (Exception ex)
@@ -512,7 +539,11 @@ public class AuthController : ControllerBase
                 user.Email ?? "",
                 user.DisplayName ?? "",
                 roles,
-                User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                User.FindFirst(ClaimTypes.NameIdentifier)?.Value,
+                user.Country,
+                user.City,
+                user.Street,
+                user.CreatedAt
             );
         }
         catch (Exception ex)
@@ -539,6 +570,9 @@ public class AuthController : ControllerBase
             string.IsNullOrWhiteSpace(request.DisplayName)
             && string.IsNullOrWhiteSpace(request.PhoneNumber)
             && string.IsNullOrWhiteSpace(request.Email)
+            && string.IsNullOrWhiteSpace(request.Country)
+            && string.IsNullOrWhiteSpace(request.City)
+            && string.IsNullOrWhiteSpace(request.Street)
         )
         {
             _logger.LogWarning("UpdateUser endpoint - empty user update request");
@@ -607,10 +641,24 @@ public class AuthController : ControllerBase
                 );
             }
 
-            // Apply display name change only after phone and email validations pass
             if (!string.IsNullOrWhiteSpace(request.DisplayName))
             {
                 user.DisplayName = request.DisplayName.Trim();
+            }
+
+            if (request.Country != null)
+            {
+                user.Country = string.IsNullOrWhiteSpace(request.Country) ? null : request.Country.Trim();
+            }
+            
+            if (request.City != null)
+            {
+                user.City = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim();
+            }
+            
+            if (request.Street != null)
+            {
+                user.Street = string.IsNullOrWhiteSpace(request.Street) ? null : request.Street.Trim();
             }
 
             var updateResult = await _userManager.UpdateAsync(user);
@@ -624,13 +672,17 @@ public class AuthController : ControllerBase
             }
 
             return Ok(
-                new
-                {
-                    Id = user.Id,
-                    DisplayName = user.DisplayName,
-                    Email = user.Email,
-                    PhoneNumber = user.PhoneNumber,
-                }
+                new UserProfile(
+                    user.Id,
+                    user.Email ?? string.Empty,
+                    user.DisplayName ?? string.Empty,
+                    Array.Empty<string>(),
+                    null,
+                    user.Country,
+                    user.City,
+                    user.Street,
+                    user.CreatedAt
+                )
             );
         }
         catch (Exception ex)
@@ -648,7 +700,7 @@ public class AuthController : ControllerBase
 
             var refreshTokenDuration = rememberMe
                 ? TimeSpan.FromDays(_config.GetValue<int>("Jwt:RefreshTokenDays", 30))
-                : TimeSpan.FromMinutes(_config.GetValue<int>("Jwt:AccessTokenMinutes", 15));
+                : TimeSpan.FromDays(1);
 
             var refreshExpires = DateTimeOffset.UtcNow.Add(refreshTokenDuration);
 
@@ -656,7 +708,17 @@ public class AuthController : ControllerBase
             await _tokenService.StoreRefreshTokenAsync(user.Id, refreshHash, refreshExpires);
 
             var roles = (await _userManager.GetRolesAsync(user)).ToArray();
-            var profile = new UserProfile(user.Id, user.Email ?? "", user.DisplayName ?? "", roles);
+            var profile = new UserProfile(
+                user.Id,
+                user.Email ?? "",
+                user.DisplayName ?? "",
+                roles,
+                null,
+                user.Country,
+                user.City,
+                user.Street,
+                user.CreatedAt
+            );
 
             var expiresIn = (int)Math.Max(0, (expiresAt - DateTimeOffset.UtcNow).TotalSeconds);
 
@@ -676,8 +738,8 @@ public class AuthController : ControllerBase
 
     private string GetClientIpAddress()
     {
-        if (Request.Headers.ContainsKey("X-Forwarded-For"))
-            return Request.Headers["X-Forwarded-For"].ToString().Split(',')[0].Trim();
+        if (Request.Headers.TryGetValue("X-Forwarded-For", out Microsoft.Extensions.Primitives.StringValues value))
+            return value.ToString().Split(',')[0].Trim();
 
         return HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
     }

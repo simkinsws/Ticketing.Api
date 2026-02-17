@@ -14,8 +14,34 @@ public record AuthResponse(
     string RefreshToken
 );
 
-public record UserProfile(string Id, string Email, string DisplayName, string[] Roles, string? nameIdentifier = null);
+public record UserProfile(
+    string Id, 
+    string Email, 
+    string DisplayName, 
+    string[] Roles, 
+    string? NameIdentifier = null,
+    string? Country = null,
+    string? City = null,
+    string? Street = null,
+    DateTimeOffset? CreatedAt = null
+);
 
-public record UserListItem(string Id, string Email, string UserName, string? DisplayName);
+public record UserListItem(
+    string Id, 
+    string Email, 
+    string UserName, 
+    string? DisplayName, 
+    string? Country = null,
+    string? City = null,
+    string? Street = null,
+    DateTimeOffset? CreatedAt = null
+);
 
-public record UpdateUserRequest(string? DisplayName, string? PhoneNumber, string? Email);
+public record UpdateUserRequest(
+    string? DisplayName, 
+    string? PhoneNumber, 
+    string? Email, 
+    string? Country,
+    string? City,
+    string? Street
+);

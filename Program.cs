@@ -141,6 +141,7 @@ builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<ITicketsService, TicketsService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<ISupportChatService, SupportChatService>();
+builder.Services.AddHttpClient<IGeolocationService, GeolocationService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
