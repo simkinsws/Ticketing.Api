@@ -107,10 +107,16 @@ public class TokenService
 
     public async Task<RefreshToken?> GetActiveRefreshTokenAsync(string userId, string tokenHash)
     {
+        var now = DateTimeOffset.UtcNow;
+        
         return await _db
-            .RefreshTokens.Where(r => r.UserId == userId && r.TokenHash == tokenHash)
+            .RefreshTokens
+            .Where(r => r.UserId == userId 
+                && r.TokenHash == tokenHash 
+                && r.RevokedAt == null 
+                && r.ExpiresAt > now)
             .OrderByDescending(r => r.CreatedAt)
-            .FirstOrDefaultAsync(r => r.IsActive);
+            .FirstOrDefaultAsync();
     }
 
     public async Task RevokeRefreshTokenAsync(RefreshToken token)

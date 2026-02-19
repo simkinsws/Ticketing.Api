@@ -409,25 +409,54 @@ public class AuthController : ControllerBase
                 ipAddress
             );
 
+            // Debug: Check current location values
+            _logger.LogInformation(
+                "User location check - Country: {Country}, City: {City}",
+                user.Country ?? "NULL",
+                user.City ?? "NULL"
+            );
+
+            // Check if we need to detect location/timezone
+            var prefs = await _db.UserPreferences.FindAsync(user.Id);
+            var needsLocationUpdate = string.IsNullOrEmpty(user.Country) || string.IsNullOrEmpty(user.City);
+            var needsTimezoneUpdate = prefs == null || string.IsNullOrEmpty(prefs.Timezone);
+
             // Auto-detect and update location + preferences if not set
-            if (string.IsNullOrEmpty(user.Country) || string.IsNullOrEmpty(user.City))
+            if (needsLocationUpdate || needsTimezoneUpdate)
             {
+                _logger.LogInformation(
+                    "Auto-detection needed - Location: {NeedsLocation}, Timezone: {NeedsTimezone}, IP: {IpAddress}",
+                    needsLocationUpdate,
+                    needsTimezoneUpdate,
+                    ipAddress
+                );
+                
                 var (country, city, timezone) = await _geolocationService.GetLocationFromIpAsync(ipAddress);
+                
+                _logger.LogInformation(
+                    "Geolocation API returned - Country: {Country}, City: {City}, Timezone: {Timezone}",
+                    country ?? "NULL",
+                    city ?? "NULL",
+                    timezone ?? "NULL"
+                );
+                
                 if (!string.IsNullOrEmpty(country))
                 {
-                    user.Country = country;
-                    user.City = city;
-                    await _userManager.UpdateAsync(user);
-                    _logger.LogInformation(
-                        "Location auto-detected and updated for user {UserId}: {City}, {Country}, {TimeZone}",
-                        user.Id,
-                        city,
-                        country,
-                        timezone
-                    );
+                    // Update location if needed
+                    if (needsLocationUpdate)
+                    {
+                        user.Country = country;
+                        user.City = city;
+                        await _userManager.UpdateAsync(user);
+                        _logger.LogInformation(
+                            "Location auto-detected and updated for user {UserId}: {City}, {Country}",
+                            user.Id,
+                            city,
+                            country
+                        );
+                    }
                     
-                    // Also create/update preferences with timezone
-                    var prefs = await _db.UserPreferences.FindAsync(user.Id);
+                    // Create/update preferences with timezone
                     if (prefs == null)
                     {
                         prefs = new UserPreferences
@@ -436,14 +465,24 @@ public class AuthController : ControllerBase
                             Timezone = timezone
                         };
                         _db.UserPreferences.Add(prefs);
+                        _logger.LogInformation("Created new preferences for user {UserId} with timezone {Timezone}", user.Id, timezone ?? "NULL");
                     }
                     else if (string.IsNullOrEmpty(prefs.Timezone))
                     {
                         prefs.Timezone = timezone;
                         prefs.UpdatedAt = DateTimeOffset.UtcNow;
+                        _logger.LogInformation("Updated preferences timezone for user {UserId} to {Timezone}", user.Id, timezone ?? "NULL");
                     }
                     await _db.SaveChangesAsync();
                 }
+                else
+                {
+                    _logger.LogWarning("Geolocation returned empty country for IP: {IpAddress}", ipAddress);
+                }
+            }
+            else
+            {
+                _logger.LogInformation("User already has location and timezone set, skipping auto-detection");
             }
 
             return await IssueTokensAsync(user, req.RememberMe);
