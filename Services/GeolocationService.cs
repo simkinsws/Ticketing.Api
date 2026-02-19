@@ -4,7 +4,7 @@ namespace Ticketing.Api.Services;
 
 public interface IGeolocationService
 {
-    Task<(string? Country, string? City)> GetLocationFromIpAsync(string ipAddress);
+    Task<(string? Country, string? City, string? Timezone)> GetLocationFromIpAsync(string ipAddress);
 }
 
 public class GeolocationService : IGeolocationService
@@ -22,7 +22,7 @@ public class GeolocationService : IGeolocationService
         _logger = logger;
     }
 
-    public async Task<(string? Country, string? City)> GetLocationFromIpAsync(string ipAddress)
+    public async Task<(string? Country, string? City, string? Timezone)> GetLocationFromIpAsync(string ipAddress)
     {
         // Skip localhost/private IPs
         if (string.IsNullOrEmpty(ipAddress) || 
@@ -33,18 +33,19 @@ public class GeolocationService : IGeolocationService
             ipAddress.StartsWith("10.", StringComparison.Ordinal))
         {
             _logger.LogDebug("Skipping geolocation for local IP: {IpAddress}", ipAddress);
-            return (null, null);
+            return (null, null, null);
         }
 
         try
         {
-            var uri = new Uri($"http://ip-api.com/json/{ipAddress}?fields=status,country,city");
+            // Added timezone field to API request
+            var uri = new Uri($"http://ip-api.com/json/{ipAddress}?fields=status,country,city,timezone");
             var response = await _httpClient.GetAsync(uri);
 
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Geolocation API returned status: {StatusCode}", response.StatusCode);
-                return (null, null);
+                return (null, null, null);
             }
 
             var json = await response.Content.ReadAsStringAsync();
@@ -52,18 +53,18 @@ public class GeolocationService : IGeolocationService
 
             if (data?.Status == "success" && !string.IsNullOrEmpty(data.Country))
             {
-                _logger.LogInformation("Location detected for IP {IpAddress}: {City}, {Country}", 
-                    ipAddress, data.City ?? "Unknown", data.Country);
-                return (data.Country, data.City);
+                _logger.LogInformation("Location detected for IP {IpAddress}: {City}, {Country}, Timezone: {Timezone}", 
+                    ipAddress, data.City ?? "Unknown", data.Country, data.Timezone ?? "Unknown");
+                return (data.Country, data.City, data.Timezone);
             }
 
             _logger.LogWarning("Geolocation failed for IP {IpAddress}: {Status}", ipAddress, data?.Status);
-            return (null, null);
+            return (null, null, null);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting location for IP {IpAddress}: {ErrorMessage}", ipAddress, ex.Message);
-            return (null, null);
+            return (null, null, null);
         }
     }
 
@@ -72,5 +73,6 @@ public class GeolocationService : IGeolocationService
         public string? Status { get; set; }
         public string? Country { get; set; }
         public string? City { get; set; }
+        public string? Timezone { get; set; }
     }
 }

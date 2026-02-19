@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Ticketing.Api.Data.Configuration;
 using Ticketing.Api.Domain;
@@ -20,6 +20,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Conversation> Conversations => Set<Conversation>();
 
     public DbSet<Message> Messages => Set<Message>();
+    
+    public DbSet<UserPreferences> UserPreferences => Set<UserPreferences>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -31,6 +33,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             .ConfigureRefreshToken()
             .ConfigureNotification()
             .ConfigureConversation()
-            .ConfigureMessage();
+            .ConfigureMessage()
+            .ConfigureUserPreferences();
     }
 }

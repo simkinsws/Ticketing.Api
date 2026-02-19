@@ -26,7 +26,9 @@ public record UserProfile(
     DateTimeOffset? CreatedAt = null,
     bool EmailConfirmed = false,
     string? PhoneNumber = null,
-    bool PhoneNumberConfirmed = false
+    bool PhoneNumberConfirmed = false,
+    string? Timezone = null,
+    string? Language = null
 );
 
 public record UserListItem(
@@ -46,5 +48,7 @@ public record UpdateUserRequest(
     string? Email, 
     string? Country,
     string? City,
-    string? Street
+    string? Street,
+    string? Timezone,
+    string? Language
 );

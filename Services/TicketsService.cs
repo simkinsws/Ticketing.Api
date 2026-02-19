@@ -108,11 +108,31 @@ public class TicketsService : ITicketsService
 
             // Notify all admins about new ticket (excluding ticket creator if they're an admin)
             var admins = await _userManager.GetUsersInRoleAsync("Admin");
+            
+            _logger.LogInformation(
+                "Creating ticket notifications: CreatorId={CreatorId}, CreatorEmail={CreatorEmail}, TotalAdmins={TotalAdmins}",
+                userId,
+                displayName,
+                admins.Count
+            );
+            
             foreach (var admin in admins)
             {
                 // Skip notifying if the ticket creator is an admin (edge case)
                 if (admin.Id == userId)
+                {
+                    _logger.LogInformation(
+                        "Skipping notification for ticket creator who is also admin: {AdminEmail}",
+                        admin.Email
+                    );
                     continue;
+                }
+
+                _logger.LogInformation(
+                    "Notifying admin {AdminEmail} about new ticket {TicketId}",
+                    admin.Email,
+                    ticket.Id
+                );
 
                 await _notificationService.CreateNotificationAsync(
                     admin.Id,

@@ -4,6 +4,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Ticketing.Api.Data;
 using Ticketing.Api.Domain;
 using Ticketing.Api.DTOs;
 using Ticketing.Api.Services;
@@ -21,6 +22,7 @@ public class AuthController : ControllerBase
     private readonly IConfiguration _config;
     private readonly ILogger<AuthController> _logger;
     private readonly IGeolocationService _geolocationService;
+    private readonly AppDbContext _db;
 
     public AuthController(
         UserManager<ApplicationUser> userManager,
@@ -29,7 +31,8 @@ public class AuthController : ControllerBase
         IEmailService emailService,
         IConfiguration config,
         ILogger<AuthController> logger,
-        IGeolocationService geolocationService
+        IGeolocationService geolocationService,
+        AppDbContext db
     )
     {
         _userManager = userManager;
@@ -39,6 +42,7 @@ public class AuthController : ControllerBase
         _config = config;
         _logger = logger;
         _geolocationService = geolocationService;
+        _db = db;
     }
 
     [HttpPost("register")]
@@ -52,9 +56,9 @@ public class AuthController : ControllerBase
 
         try
         {
-            // Auto-detect location from IP (Country + City only)
+            // Auto-detect location from IP (Country + City + Timezone)
             var ipAddress = GetClientIpAddress();
-            var (country, city) = await _geolocationService.GetLocationFromIpAsync(ipAddress);
+            var (country, city, timezone) = await _geolocationService.GetLocationFromIpAsync(ipAddress);
 
             var user = new ApplicationUser
             {
@@ -81,11 +85,22 @@ public class AuthController : ControllerBase
                 return BadRequest(create.Errors);
             }
 
+            // Create user preferences with detected timezone
+            var preferences = new UserPreferences
+            {
+                UserId = user.Id,
+                Timezone = timezone,
+                Language = null // Will be set by user later
+            };
+            _db.UserPreferences.Add(preferences);
+            await _db.SaveChangesAsync();
+
             await _userManager.AddToRoleAsync(user, "Customer");
             _logger.LogInformation(
-                "User registered successfully. Email: {Email}, UserId: {UserId}",
+                "User registered successfully. Email: {Email}, UserId: {UserId}, Timezone: {Timezone}",
                 req.Email,
-                user.Id
+                user.Id,
+                timezone ?? "Unknown"
             );
 
             var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
@@ -394,10 +409,10 @@ public class AuthController : ControllerBase
                 ipAddress
             );
 
-            // Auto-detect and update location if not set
+            // Auto-detect and update location + preferences if not set
             if (string.IsNullOrEmpty(user.Country) || string.IsNullOrEmpty(user.City))
             {
-                var (country, city) = await _geolocationService.GetLocationFromIpAsync(ipAddress);
+                var (country, city, timezone) = await _geolocationService.GetLocationFromIpAsync(ipAddress);
                 if (!string.IsNullOrEmpty(country))
                 {
                     user.Country = country;
@@ -409,6 +424,24 @@ public class AuthController : ControllerBase
                         city,
                         country
                     );
+                    
+                    // Also create/update preferences with timezone
+                    var prefs = await _db.UserPreferences.FindAsync(user.Id);
+                    if (prefs == null)
+                    {
+                        prefs = new UserPreferences
+                        {
+                            UserId = user.Id,
+                            Timezone = timezone
+                        };
+                        _db.UserPreferences.Add(prefs);
+                    }
+                    else if (string.IsNullOrEmpty(prefs.Timezone))
+                    {
+                        prefs.Timezone = timezone;
+                        prefs.UpdatedAt = DateTimeOffset.UtcNow;
+                    }
+                    await _db.SaveChangesAsync();
                 }
             }
 
@@ -529,6 +562,10 @@ public class AuthController : ControllerBase
             }
 
             var roles = (await _userManager.GetRolesAsync(user)).ToArray();
+            
+            // Fetch user preferences
+            var preferences = await _db.UserPreferences.FindAsync(user.Id);
+            
             _logger.LogInformation(
                 "Me endpoint - User retrieved. UserId: {UserId}, Email: {Email}, Roles: {Roles}, NameIdentifier: {NameIdentifier}",
                 user.Id,
@@ -548,7 +585,9 @@ public class AuthController : ControllerBase
                 user.CreatedAt,
                 user.EmailConfirmed,
                 user.PhoneNumber,
-                user.PhoneNumberConfirmed
+                user.PhoneNumberConfirmed,
+                preferences?.Timezone,
+                preferences?.Language
             );
         }
         catch (Exception ex)
@@ -578,6 +617,8 @@ public class AuthController : ControllerBase
             && string.IsNullOrWhiteSpace(request.Country)
             && string.IsNullOrWhiteSpace(request.City)
             && string.IsNullOrWhiteSpace(request.Street)
+            && request.Timezone == null
+            && request.Language == null
         )
         {
             _logger.LogWarning("UpdateUser endpoint - empty user update request");
@@ -675,6 +716,34 @@ public class AuthController : ControllerBase
             if (!updateResult.Succeeded)
                 return BadRequest(updateResult.Errors);
 
+            // Update or create user preferences (timezone, language)
+            var preferences = await _db.UserPreferences.FindAsync(user.Id);
+            if (preferences == null)
+            {
+                preferences = new UserPreferences
+                {
+                    UserId = user.Id,
+                    Timezone = request.Timezone,
+                    Language = request.Language
+                };
+                _db.UserPreferences.Add(preferences);
+            }
+            else
+            {
+                if (request.Timezone != null)
+                {
+                    preferences.Timezone = string.IsNullOrWhiteSpace(request.Timezone) ? null : request.Timezone.Trim();
+                }
+                
+                if (request.Language != null)
+                {
+                    preferences.Language = string.IsNullOrWhiteSpace(request.Language) ? null : request.Language.Trim();
+                }
+                
+                preferences.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+            await _db.SaveChangesAsync();
+
             // Send email confirmation after successful update
             if (!string.IsNullOrEmpty(callbackUrl) && !string.IsNullOrEmpty(newEmail))
             {
@@ -694,7 +763,9 @@ public class AuthController : ControllerBase
                     user.CreatedAt,
                     user.EmailConfirmed,
                     user.PhoneNumber,
-                    user.PhoneNumberConfirmed
+                    user.PhoneNumberConfirmed,
+                    preferences.Timezone,
+                    preferences.Language
                 )
             );
         }
@@ -721,6 +792,10 @@ public class AuthController : ControllerBase
             await _tokenService.StoreRefreshTokenAsync(user.Id, refreshHash, refreshExpires);
 
             var roles = (await _userManager.GetRolesAsync(user)).ToArray();
+            
+            // Fetch user preferences
+            var preferences = await _db.UserPreferences.FindAsync(user.Id);
+            
             var profile = new UserProfile(
                 user.Id,
                 user.Email ?? "",
@@ -733,7 +808,9 @@ public class AuthController : ControllerBase
                 user.CreatedAt,
                 user.EmailConfirmed,
                 user.PhoneNumber,
-                user.PhoneNumberConfirmed
+                user.PhoneNumberConfirmed,
+                preferences?.Timezone,
+                preferences?.Language
             );
 
             var expiresIn = (int)Math.Max(0, (expiresAt - DateTimeOffset.UtcNow).TotalSeconds);
