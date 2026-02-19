@@ -43,7 +43,8 @@ public class NotificationService : INotificationService
           entity.Subtitle,
           entity.Message,
           entity.CreatedAtUtc.UtcDateTime,
-          IsRead: entity.ReadAtUtc != null
+          IsRead: entity.ReadAtUtc != null,
+          entity.TicketId
       );
         await _hub.Clients.User(userId).SendAsync("notificationCreated", dto);
 

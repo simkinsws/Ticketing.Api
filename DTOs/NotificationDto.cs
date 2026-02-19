@@ -6,7 +6,8 @@ public record NotificationDto(
     string Subtitle,
     string? Message,
     DateTime CreatedAtUtc,
-    bool IsRead
+    bool IsRead,
+    Guid? TicketId
 );
 
 public record CreateNotificationRequest(string Title, string Subtitle, string? Message);

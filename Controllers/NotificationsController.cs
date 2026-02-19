@@ -43,7 +43,8 @@ public class NotificationsController : ControllerBase
                 n.Subtitle,
                 n.Message,
                 n.CreatedAtUtc.UtcDateTime,
-                n.ReadAtUtc != null
+                n.ReadAtUtc != null,
+                n.TicketId
             ))
             .ToListAsync();
 

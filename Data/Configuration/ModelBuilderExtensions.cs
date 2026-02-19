@@ -163,4 +163,29 @@ public static class ModelBuilderExtensions
 
         return builder;
     }
+
+    public static ModelBuilder ConfigureUserPreferences(this ModelBuilder builder)
+    {
+        builder.Entity<UserPreferences>(b =>
+        {
+            b.ToTable("UserPreferences");
+            
+            // UserId is Primary Key (1-to-1 with ApplicationUser)
+            b.HasKey(p => p.UserId);
+            
+            // Configure relationship
+            b.HasOne(p => p.User)
+                .WithOne()
+                .HasForeignKey<UserPreferences>(p => p.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            
+            // Properties
+            b.Property(p => p.Timezone).HasMaxLength(100);
+            b.Property(p => p.Language).HasMaxLength(10);
+            b.Property(p => p.DateFormat).HasMaxLength(20);
+            b.Property(p => p.TimeFormat).HasMaxLength(10);
+        });
+
+        return builder;
+    }
 }
