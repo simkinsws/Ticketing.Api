@@ -419,10 +419,11 @@ public class AuthController : ControllerBase
                     user.City = city;
                     await _userManager.UpdateAsync(user);
                     _logger.LogInformation(
-                        "Location auto-detected and updated for user {UserId}: {City}, {Country}",
+                        "Location auto-detected and updated for user {UserId}: {City}, {Country}, {TimeZone}",
                         user.Id,
                         city,
-                        country
+                        country,
+                        timezone
                     );
                     
                     // Also create/update preferences with timezone
