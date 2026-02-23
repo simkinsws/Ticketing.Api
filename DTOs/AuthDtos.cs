@@ -28,7 +28,10 @@ public record UserProfile(
     string? PhoneNumber = null,
     bool PhoneNumberConfirmed = false,
     string? Timezone = null,
-    string? Language = null
+    string? Language = null,
+    string? TimeFormat = null,
+    string? DateFormat = null,
+    string? FormattedCurrentTime = null
 );
 
 public record UserListItem(
@@ -50,5 +53,7 @@ public record UpdateUserRequest(
     string? City,
     string? Street,
     string? Timezone,
-    string? Language
+    string? Language,
+    string? TimeFormat,
+    string? DateFormat
 );

@@ -29,21 +29,23 @@ public class AdminService : IAdminService
     private readonly ILogger<AdminService> _logger;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly INotificationService _notificationService;
+    private readonly IUserActivityService _activityService;
 
     public AdminService(
         AppDbContext db,
         UserManager<ApplicationUser> userManager,
         ILogger<AdminService> logger,
         IHttpContextAccessor httpContextAccessor,
-        RoleManager<IdentityRole> roleManager
-,
-        INotificationService notificationService)
+        RoleManager<IdentityRole> roleManager,
+        INotificationService notificationService,
+        IUserActivityService activityService)
     {
         _db = db;
         _userManager = userManager;
         _logger = logger;
         _httpContextAccessor = httpContextAccessor;
         _notificationService = notificationService;
+        _activityService = activityService;
     }
 
     public async Task<bool> DeleteByIdAsync(Guid id)
@@ -184,9 +186,14 @@ public class AdminService : IAdminService
                 return null;
             }
 
+            var oldStatus = ticket.Status;
             ticket.Status = status;
             ticket.UpdatedAt = DateTimeOffset.UtcNow;
             await _db.SaveChangesAsync();
+            
+            // Log activity for ticket owner
+            await _activityService.LogTicketStatusChangedAsync(ticket.CustomerId, ticket, oldStatus, status);
+            
             _logger.LogInformation(
                 "Successfully updated status of ticket with ID: {TicketId} to {Status}",
                 id,
@@ -298,6 +305,14 @@ public class AdminService : IAdminService
         if (!string.IsNullOrEmpty(adminId))
         {
             var admin = await _userManager.FindByIdAsync(adminId);
+            
+            // Log activity for ticket owner
+            await _activityService.LogTicketAssignedAsync(
+                ticket.CustomerId, 
+                ticket, 
+                admin?.DisplayName ?? "an admin"
+            );
+            
             await _notificationService.CreateNotificationAsync(
                 adminId,
                 "Ticket Assigned",

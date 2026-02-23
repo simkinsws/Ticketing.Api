@@ -22,6 +22,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Message> Messages => Set<Message>();
     
     public DbSet<UserPreferences> UserPreferences => Set<UserPreferences>();
+    
+    public DbSet<UserActivity> UserActivities => Set<UserActivity>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -34,6 +36,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             .ConfigureNotification()
             .ConfigureConversation()
             .ConfigureMessage()
-            .ConfigureUserPreferences();
+            .ConfigureUserPreferences()
+            .ConfigureUserActivity();
     }
 }

@@ -23,6 +23,7 @@ public class AuthController : ControllerBase
     private readonly ILogger<AuthController> _logger;
     private readonly IGeolocationService _geolocationService;
     private readonly AppDbContext _db;
+    private readonly IDateTimeFormattingService _dateTimeFormattingService;
 
     public AuthController(
         UserManager<ApplicationUser> userManager,
@@ -32,7 +33,8 @@ public class AuthController : ControllerBase
         IConfiguration config,
         ILogger<AuthController> logger,
         IGeolocationService geolocationService,
-        AppDbContext db
+        AppDbContext db,
+        IDateTimeFormattingService dateTimeFormattingService
     )
     {
         _userManager = userManager;
@@ -43,6 +45,7 @@ public class AuthController : ControllerBase
         _logger = logger;
         _geolocationService = geolocationService;
         _db = db;
+        _dateTimeFormattingService = dateTimeFormattingService;
     }
 
     [HttpPost("register")]
@@ -85,12 +88,14 @@ public class AuthController : ControllerBase
                 return BadRequest(create.Errors);
             }
 
-            // Create user preferences with detected timezone
+            // Create user preferences with detected timezone or default to Asia/Jerusalem
             var preferences = new UserPreferences
             {
                 UserId = user.Id,
-                Timezone = timezone,
-                Language = null // Will be set by user later
+                Timezone = timezone ?? "Asia/Jerusalem",
+                Language = "EN",
+                TimeFormat = "24h",
+                DateFormat = "dd-MM-yyyy"
             };
             _db.UserPreferences.Add(preferences);
             await _db.SaveChangesAsync();
@@ -419,15 +424,17 @@ public class AuthController : ControllerBase
             // Check if we need to detect location/timezone
             var prefs = await _db.UserPreferences.FindAsync(user.Id);
             var needsLocationUpdate = string.IsNullOrEmpty(user.Country) || string.IsNullOrEmpty(user.City);
-            var needsTimezoneUpdate = prefs == null || string.IsNullOrEmpty(prefs.Timezone);
+            var needsPreferencesUpdate = prefs == null || string.IsNullOrEmpty(prefs.Timezone) 
+                || string.IsNullOrEmpty(prefs.Language) || string.IsNullOrEmpty(prefs.TimeFormat) 
+                || string.IsNullOrEmpty(prefs.DateFormat);
 
             // Auto-detect and update location + preferences if not set
-            if (needsLocationUpdate || needsTimezoneUpdate)
+            if (needsLocationUpdate || needsPreferencesUpdate)
             {
                 _logger.LogInformation(
-                    "Auto-detection needed - Location: {NeedsLocation}, Timezone: {NeedsTimezone}, IP: {IpAddress}",
+                    "Auto-detection needed - Location: {NeedsLocation}, Preferences: {NeedsPreferences}, IP: {IpAddress}",
                     needsLocationUpdate,
-                    needsTimezoneUpdate,
+                    needsPreferencesUpdate,
                     ipAddress
                 );
                 
@@ -440,49 +447,70 @@ public class AuthController : ControllerBase
                     timezone ?? "NULL"
                 );
                 
-                if (!string.IsNullOrEmpty(country))
+                if (!string.IsNullOrEmpty(country) && needsLocationUpdate)
                 {
                     // Update location if needed
-                    if (needsLocationUpdate)
+                    user.Country = country;
+                    user.City = city;
+                    await _userManager.UpdateAsync(user);
+                    _logger.LogInformation(
+                        "Location auto-detected and updated for user {UserId}: {City}, {Country}",
+                        user.Id,
+                        city,
+                        country
+                    );
+                }
+                
+                // Create/update preferences with defaults
+                if (prefs == null)
+                {
+                    prefs = new UserPreferences
                     {
-                        user.Country = country;
-                        user.City = city;
-                        await _userManager.UpdateAsync(user);
-                        _logger.LogInformation(
-                            "Location auto-detected and updated for user {UserId}: {City}, {Country}",
-                            user.Id,
-                            city,
-                            country
-                        );
-                    }
-                    
-                    // Create/update preferences with timezone
-                    if (prefs == null)
-                    {
-                        prefs = new UserPreferences
-                        {
-                            UserId = user.Id,
-                            Timezone = timezone
-                        };
-                        _db.UserPreferences.Add(prefs);
-                        _logger.LogInformation("Created new preferences for user {UserId} with timezone {Timezone}", user.Id, timezone ?? "NULL");
-                    }
-                    else if (string.IsNullOrEmpty(prefs.Timezone))
-                    {
-                        prefs.Timezone = timezone;
-                        prefs.UpdatedAt = DateTimeOffset.UtcNow;
-                        _logger.LogInformation("Updated preferences timezone for user {UserId} to {Timezone}", user.Id, timezone ?? "NULL");
-                    }
-                    await _db.SaveChangesAsync();
+                        UserId = user.Id,
+                        Timezone = timezone ?? "Asia/Jerusalem",
+                        Language = "EN",
+                        TimeFormat = "24h",
+                        DateFormat = "dd-MM-yyyy"
+                    };
+                    _db.UserPreferences.Add(prefs);
+                    _logger.LogInformation("Created new preferences for user {UserId} with default values", user.Id);
                 }
                 else
                 {
-                    _logger.LogWarning("Geolocation returned empty country for IP: {IpAddress}", ipAddress);
+                    // Only update if not already set
+                    bool updated = false;
+                    if (string.IsNullOrEmpty(prefs.Timezone))
+                    {
+                        prefs.Timezone = timezone ?? "Asia/Jerusalem";
+                        updated = true;
+                    }
+                    if (string.IsNullOrEmpty(prefs.Language))
+                    {
+                        prefs.Language = "EN";
+                        updated = true;
+                    }
+                    if (string.IsNullOrEmpty(prefs.TimeFormat))
+                    {
+                        prefs.TimeFormat = "24h";
+                        updated = true;
+                    }
+                    if (string.IsNullOrEmpty(prefs.DateFormat))
+                    {
+                        prefs.DateFormat = "dd-MM-yyyy";
+                        updated = true;
+                    }
+                    
+                    if (updated)
+                    {
+                        prefs.UpdatedAt = DateTimeOffset.UtcNow;
+                        _logger.LogInformation("Updated preferences with default values for user {UserId}", user.Id);
+                    }
                 }
+                await _db.SaveChangesAsync();
             }
             else
             {
-                _logger.LogInformation("User already has location and timezone set, skipping auto-detection");
+                _logger.LogInformation("User already has location and preferences set, skipping auto-detection");
             }
 
             return await IssueTokensAsync(user, req.RememberMe);
@@ -606,6 +634,9 @@ public class AuthController : ControllerBase
             // Fetch user preferences
             var preferences = await _db.UserPreferences.FindAsync(user.Id);
             
+            // Format current time according to user preferences
+            var formattedCurrentTime = _dateTimeFormattingService.FormatDateTime(DateTimeOffset.UtcNow, preferences);
+            
             _logger.LogInformation(
                 "Me endpoint - User retrieved. UserId: {UserId}, Email: {Email}, Roles: {Roles}, NameIdentifier: {NameIdentifier}",
                 user.Id,
@@ -627,7 +658,10 @@ public class AuthController : ControllerBase
                 user.PhoneNumber,
                 user.PhoneNumberConfirmed,
                 preferences?.Timezone,
-                preferences?.Language
+                preferences?.Language,
+                preferences?.TimeFormat,
+                preferences?.DateFormat,
+                formattedCurrentTime
             );
         }
         catch (Exception ex)
@@ -659,6 +693,8 @@ public class AuthController : ControllerBase
             && string.IsNullOrWhiteSpace(request.Street)
             && request.Timezone == null
             && request.Language == null
+            && request.TimeFormat == null
+            && request.DateFormat == null
         )
         {
             _logger.LogWarning("UpdateUser endpoint - empty user update request");
@@ -756,7 +792,7 @@ public class AuthController : ControllerBase
             if (!updateResult.Succeeded)
                 return BadRequest(updateResult.Errors);
 
-            // Update or create user preferences (timezone, language)
+            // Update or create user preferences (timezone, language, timeFormat, dateFormat)
             var preferences = await _db.UserPreferences.FindAsync(user.Id);
             if (preferences == null)
             {
@@ -764,7 +800,9 @@ public class AuthController : ControllerBase
                 {
                     UserId = user.Id,
                     Timezone = request.Timezone,
-                    Language = request.Language
+                    Language = request.Language,
+                    TimeFormat = request.TimeFormat,
+                    DateFormat = request.DateFormat
                 };
                 _db.UserPreferences.Add(preferences);
             }
@@ -778,6 +816,16 @@ public class AuthController : ControllerBase
                 if (request.Language != null)
                 {
                     preferences.Language = string.IsNullOrWhiteSpace(request.Language) ? null : request.Language.Trim();
+                }
+                
+                if (request.TimeFormat != null)
+                {
+                    preferences.TimeFormat = string.IsNullOrWhiteSpace(request.TimeFormat) ? null : request.TimeFormat.Trim();
+                }
+                
+                if (request.DateFormat != null)
+                {
+                    preferences.DateFormat = string.IsNullOrWhiteSpace(request.DateFormat) ? null : request.DateFormat.Trim();
                 }
                 
                 preferences.UpdatedAt = DateTimeOffset.UtcNow;
@@ -805,7 +853,10 @@ public class AuthController : ControllerBase
                     user.PhoneNumber,
                     user.PhoneNumberConfirmed,
                     preferences.Timezone,
-                    preferences.Language
+                    preferences.Language,
+                    preferences.TimeFormat,
+                    preferences.DateFormat,
+                    _dateTimeFormattingService.FormatDateTime(DateTimeOffset.UtcNow, preferences)
                 )
             );
         }
@@ -850,7 +901,10 @@ public class AuthController : ControllerBase
                 user.PhoneNumber,
                 user.PhoneNumberConfirmed,
                 preferences?.Timezone,
-                preferences?.Language
+                preferences?.Language,
+                preferences?.TimeFormat,
+                preferences?.DateFormat,
+                _dateTimeFormattingService.FormatDateTime(DateTimeOffset.UtcNow, preferences)
             );
 
             var expiresIn = (int)Math.Max(0, (expiresAt - DateTimeOffset.UtcNow).TotalSeconds);
