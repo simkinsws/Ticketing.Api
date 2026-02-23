@@ -6,10 +6,10 @@ public class UserPreferences
     public ApplicationUser User { get; set; } = null!;
     
     // Preferences
-    public string? Timezone { get; set; } // e.g., "America/New_York", "Europe/London"
-    public string? Language { get; set; } // e.g., "en", "es", "fr" (for future)
-    public string? DateFormat { get; set; } // e.g., "MM/DD/YYYY", "DD/MM/YYYY" (for future)
-    public string? TimeFormat { get; set; } // e.g., "12h", "24h" (for future)
+    public string? Timezone { get; set; } // e.g., "America/New_York", "Europe/London", "Asia/Jerusalem"
+    public string? Language { get; set; } // e.g., "EN", "ES", "FR"
+    public string? DateFormat { get; set; } // e.g., "MM-dd-yyyy", "dd-MM-yyyy"
+    public string? TimeFormat { get; set; } // e.g., "12h", "24h"
     
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;

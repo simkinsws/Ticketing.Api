@@ -25,19 +25,22 @@ public class TicketsService : ITicketsService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly INotificationService _notificationService;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IUserActivityService _activityService;
 
     public TicketsService(
         AppDbContext db, 
         ILogger<TicketsService> logger, 
         IHttpContextAccessor httpContextAccessor,
         INotificationService notificationService,
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        IUserActivityService activityService)
     {
         _db = db;
         _logger = logger;
         _httpContextAccessor = httpContextAccessor;
         _notificationService = notificationService;
         _userManager = userManager;
+        _activityService = activityService;
     }
 
     public async Task<Ticket?> GetTicketByIdAsync(Guid id)
@@ -98,6 +101,9 @@ public class TicketsService : ITicketsService
 
             _db.Tickets.Add(ticket);
             await _db.SaveChangesAsync();
+
+            // Log activity
+            await _activityService.LogTicketCreatedAsync(userId, ticket);
 
             _logger.LogInformation(
                 "Successfully created ticket with ID: {TicketId} for user {DisplayName} (ID: {UserId})",
@@ -352,6 +358,9 @@ public class TicketsService : ITicketsService
 
             await _db.SaveChangesAsync();
 
+            // Log activity
+            await _activityService.LogTicketUpdatedAsync(userId!, ticket);
+
             _logger.LogInformation("Successfully updated ticket with ID: {TicketId}", ticket.Id);
 
             // Notify assigned admin if exists, otherwise notify all admins
@@ -423,17 +432,20 @@ public class TicketsService : ITicketsService
 
         try
         {
-            _db.TicketComments.Add(
-                new TicketComment
-                {
-                    TicketId = ticket.Id,
-                    AuthorId = userId,
-                    Message = request.Message.Trim(),
-                }
-            );
+            var comment = new TicketComment
+            {
+                TicketId = ticket.Id,
+                AuthorId = userId,
+                Message = request.Message.Trim(),
+            };
+            
+            _db.TicketComments.Add(comment);
             ticket.UpdatedAt = DateTimeOffset.UtcNow;
 
             await _db.SaveChangesAsync();
+
+            // Log activity for the commenter
+            await _activityService.LogCommentAddedAsync(userId, ticket, comment, displayName!);
 
             _logger.LogInformation(
                 "Successfully added comment to ticket with ID: {TicketId} by user {DisplayName} (ID: {UserId})",

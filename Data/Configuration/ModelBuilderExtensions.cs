@@ -188,4 +188,42 @@ public static class ModelBuilderExtensions
 
         return builder;
     }
+
+    public static ModelBuilder ConfigureUserActivity(this ModelBuilder builder)
+    {
+        builder.Entity<UserActivity>(b =>
+        {
+            b.ToTable("UserActivities");
+            
+            b.HasKey(a => a.Id);
+            
+            // Indexes for efficient querying
+            b.HasIndex(a => a.UserId);
+            b.HasIndex(a => a.CreatedAt);
+            b.HasIndex(a => a.Category);
+            b.HasIndex(a => new { a.UserId, a.CreatedAt });
+            
+            // Properties
+            b.Property(a => a.Title).HasMaxLength(500).IsRequired();
+            b.Property(a => a.Description).HasMaxLength(2000).IsRequired();
+            b.Property(a => a.EntityId).HasMaxLength(100);
+            b.Property(a => a.Category)
+                .HasConversion<string>()
+                .HasMaxLength(50)
+                .IsRequired();
+            b.Property(a => a.EntityType)
+                .HasConversion<string>()
+                .HasMaxLength(50)
+                .IsRequired();
+            
+            // Relationship with User
+            b.HasOne(a => a.User)
+                .WithMany()
+                .HasForeignKey(a => a.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        return builder;
+    }
 }
+
