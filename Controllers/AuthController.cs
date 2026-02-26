@@ -320,6 +320,72 @@ public class AuthController : ControllerBase
         }
     }
 
+    [Authorize]
+    [HttpPost("change-password")]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest req)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            _logger.LogWarning("Change password failed - User not authenticated");
+            return Unauthorized();
+        }
+
+        _logger.LogInformation(
+            "Password change attempt for UserId: {UserId}, Email: {Email} from IP: {IpAddress}",
+            user.Id,
+            user.Email,
+            GetClientIpAddress()
+        );
+
+        try
+        {
+            // Verify current password and change to new password
+            var result = await _userManager.ChangePasswordAsync(
+                user,
+                req.CurrentPassword,
+                req.NewPassword
+            );
+
+            if (!result.Succeeded)
+            {
+                _logger.LogWarning(
+                    "Password change failed for UserId: {UserId}, Email: {Email}. Errors: {Errors}",
+                    user.Id,
+                    user.Email,
+                    string.Join(", ", result.Errors.Select(e => e.Description))
+                );
+                return BadRequest(
+                    new { message = "Password change failed", errors = result.Errors }
+                );
+            }
+
+            _logger.LogInformation(
+                "Password changed successfully for UserId: {UserId}, Email: {Email}",
+                user.Id,
+                user.Email
+            );
+
+            return Ok(
+                new
+                {
+                    message = "Password changed successfully.",
+                }
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Unexpected error during password change for UserId: {UserId}, Email: {Email}. Error: {ErrorMessage}",
+                user.Id,
+                user.Email,
+                ex.Message
+            );
+            return StatusCode(500, "An unexpected error occurred");
+        }
+    }
+
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest req)
     {
