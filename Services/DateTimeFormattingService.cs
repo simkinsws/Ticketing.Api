@@ -47,6 +47,7 @@ public class DateTimeFormattingService : IDateTimeFormattingService
             "dd/MM/yyyy" => "dd/MM/yyyy",
             "MM/dd/yyyy" => "MM/dd/yyyy",
             "yyyy/MM/dd" => "yyyy/MM/dd",
+            "MMMM dd, yyyy" => "MMMM dd, yyyy",
             _ => "dd-MM-yyyy"
         };
     }
